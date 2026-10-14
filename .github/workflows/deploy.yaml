@@ -1,0 +1,44 @@
+name: Deploy Flight Tracker
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 2323 # Custom SSH port
+          script: |
+            set -e
+
+            echo "=== 1. Navigating to Flight Tracker directory ==="
+            cd /opt/flight-tracker
+
+            echo "=== 2. Pulling latest code from main branch ==="
+            git pull origin main
+
+            echo "=== 3. Installing backend dependencies ==="
+            npm ci --omit=dev
+
+            echo "=== 4. Installing frontend dependencies & building production bundle ==="
+            npm ci --prefix client
+            npm run build --prefix client
+
+            echo "=== 5. Ensuring airport database is seeded ==="
+            node server/seed_airports.js
+
+            echo "=== 6. Restarting backend service with PM2 ==="
+            pm2 restart flight-tracker || pm2 start ecosystem.config.js --env production
+            pm2 save
+
+            echo "=== Deployment Complete! ==="
+
