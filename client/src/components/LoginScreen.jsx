@@ -3,7 +3,7 @@ import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { Plane, ShieldCheck, ShieldAlert, Lock, AlertCircle, Key, ArrowRight, UserCheck } from 'lucide-react';
 import { loginWithGoogle, loginWithDev } from '../api';
 
-export default function LoginScreen({ authConfig, onLoginSuccess }) {
+export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showDevLogin, setShowDevLogin] = useState(!authConfig?.hasGoogleAuth);
@@ -113,6 +113,35 @@ export default function LoginScreen({ authConfig, onLoginSuccess }) {
               <p className="text-[11px] text-center text-slate-400">
                 Only Google accounts listed on the administrator's allowlist will be granted access.
               </p>
+
+              <p className="text-[10px] text-center text-slate-500 leading-relaxed">
+                By continuing, you agree to our{' '}
+                <a
+                  href="/termsofservice"
+                  onClick={(e) => {
+                    if (onNavigate) {
+                      e.preventDefault();
+                      onNavigate('/termsofservice');
+                    }
+                  }}
+                  className="text-cyan-400 hover:text-cyan-300 hover:underline"
+                >
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a
+                  href="/privacy"
+                  onClick={(e) => {
+                    if (onNavigate) {
+                      e.preventDefault();
+                      onNavigate('/privacy');
+                    }
+                  }}
+                  className="text-cyan-400 hover:text-cyan-300 hover:underline"
+                >
+                  Privacy Policy
+                </a>.
+              </p>
             </div>
           </GoogleOAuthProvider>
         ) : (
@@ -167,10 +196,40 @@ export default function LoginScreen({ authConfig, onLoginSuccess }) {
           </div>
         )}
 
-        {/* Footer info */}
-        <div className="mt-8 pt-4 border-t border-slate-800/80 text-center text-[10px] text-slate-500 flex items-center justify-center gap-1">
-          <Lock className="w-3 h-3 text-slate-600" />
-          <span>Secured with JWT sessions & SQLite allowlist validation</span>
+        {/* Legal & Privacy Links */}
+        <div className="mt-6 pt-4 border-t border-slate-800/80 text-center space-y-2">
+          <div className="flex items-center justify-center gap-3 text-xs font-semibold">
+            <a
+              href="/privacy"
+              onClick={(e) => {
+                if (onNavigate) {
+                  e.preventDefault();
+                  onNavigate('/privacy');
+                }
+              }}
+              className="text-cyan-400 hover:text-cyan-300 hover:underline transition"
+            >
+              Privacy Policy
+            </a>
+            <span className="text-slate-600">•</span>
+            <a
+              href="/termsofservice"
+              onClick={(e) => {
+                if (onNavigate) {
+                  e.preventDefault();
+                  onNavigate('/termsofservice');
+                }
+              }}
+              className="text-cyan-400 hover:text-cyan-300 hover:underline transition"
+            >
+              Terms of Service
+            </a>
+          </div>
+
+          <div className="text-[10px] text-slate-500 flex items-center justify-center gap-1.5 pt-0.5">
+            <Lock className="w-3 h-3 text-slate-600" />
+            <span>Secured with JWT sessions & SQLite allowlist validation</span>
+          </div>
         </div>
       </div>
     </div>

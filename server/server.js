@@ -1529,6 +1529,25 @@ if (fs.existsSync(clientDist)) {
       }
     }
   }));
+  // Dedicated public legal routes
+  app.get(['/privacy', '/privacy.html'], (req, res) => {
+    const staticPrivacy = path.join(clientDist, 'privacy.html');
+    res.setHeader('Cache-Control', 'no-cache');
+    if (fs.existsSync(staticPrivacy)) {
+      return res.sendFile(staticPrivacy);
+    }
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+
+  app.get(['/termsofservice', '/termsofservice.html', '/terms', '/terms.html'], (req, res) => {
+    const staticTerms = path.join(clientDist, 'termsofservice.html');
+    res.setHeader('Cache-Control', 'no-cache');
+    if (fs.existsSync(staticTerms)) {
+      return res.sendFile(staticTerms);
+    }
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.setHeader('Cache-Control', 'no-cache');

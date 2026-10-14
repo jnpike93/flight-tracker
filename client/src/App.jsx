@@ -14,6 +14,8 @@ import AeroLogWrappedModal from './components/AeroLogWrappedModal';
 import FleetAndSeatModal from './components/FleetAndSeatModal';
 import BoardingPassScanModal from './components/BoardingPassScanModal';
 import LoginScreen from './components/LoginScreen';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
 import { Globe, Map } from 'lucide-react';
 import {
   fetchFlights,
@@ -26,9 +28,23 @@ import {
 } from './api';
 
 export default function App() {
+  const [currentRoute, setCurrentRoute] = useState(() => window.location.pathname);
   const [currentUser, setCurrentUser] = useState(() => getStoredUser());
   const [authConfig, setAuthConfig] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // Sync client-side route on browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => setCurrentRoute(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateTo = (path) => {
+    window.history.pushState({}, '', path);
+    setCurrentRoute(path);
+    window.scrollTo(0, 0);
+  };
 
   const [flights, setFlights] = useState([]);
   const [stats, setStats] = useState(null);
@@ -142,6 +158,14 @@ export default function App() {
     await loadData();
   };
 
+  // Public legal documents (accessible by any visitor or crawler without auth)
+  if (currentRoute === '/privacy') {
+    return <PrivacyPolicy onBack={() => navigateTo('/')} />;
+  }
+  if (currentRoute === '/termsofservice' || currentRoute === '/terms') {
+    return <TermsOfService onBack={() => navigateTo('/')} />;
+  }
+
   // Loading initial auth state
   if (authLoading) {
     return (
@@ -158,6 +182,7 @@ export default function App() {
       <LoginScreen
         authConfig={authConfig}
         onLoginSuccess={handleLoginSuccess}
+        onNavigate={navigateTo}
       />
     );
   }
@@ -272,8 +297,24 @@ export default function App() {
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-slate-800/80 py-4 px-6 text-center text-xs text-slate-500 flex items-center justify-between max-w-7xl mx-auto w-full">
-          <span>AeroLog Flight Tracker • Protected by Google OAuth & Access Allowlist</span>
+        <footer className="border-t border-slate-800/80 py-4 px-6 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3 max-w-7xl mx-auto w-full">
+          <div className="flex items-center gap-2">
+            <span>AeroLog Flight Tracker</span>
+            <span>•</span>
+            <button
+              onClick={() => navigateTo('/privacy')}
+              className="text-cyan-400 hover:underline hover:text-cyan-300 cursor-pointer"
+            >
+              Privacy Policy
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => navigateTo('/termsofservice')}
+              className="text-cyan-400 hover:underline hover:text-cyan-300 cursor-pointer"
+            >
+              Terms of Service
+            </button>
+          </div>
           <span className="font-mono text-[11px] text-cyan-500/80">Logged in as {currentUser.email}</span>
         </footer>
 
