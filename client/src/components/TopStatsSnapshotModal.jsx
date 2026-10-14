@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import html2canvas from 'html2canvas';
 import {
   Camera,
   Copy,
@@ -7,15 +6,19 @@ import {
   Download,
   X,
   Plane,
-  Globe2,
   MapPin,
   Calendar,
   Compass,
-  Award,
   Sparkles,
-  History,
-  ArrowRight
+  Share2,
+  AlertCircle
 } from 'lucide-react';
+import {
+  exportOrCopyImage,
+  downloadElementAsImage,
+  isMobileDevice,
+  canShareFiles
+} from '../utils/imageExport';
 
 export default function TopStatsSnapshotModal({
   isOpen,
@@ -25,7 +28,7 @@ export default function TopStatsSnapshotModal({
   unit = 'miles'
 }) {
   const cardRef = useRef(null);
-  const [copyStatus, setCopyStatus] = useState('idle'); // 'idle' | 'copying' | 'copied' | 'error'
+  const [copyStatus, setCopyStatus] = useState('idle'); // 'idle' | 'copying' | 'copied' | 'shared' | 'downloaded' | 'error'
   const [downloading, setDownloading] = useState(false);
 
   if (!isOpen || !stats) return null;
@@ -62,50 +65,30 @@ export default function TopStatsSnapshotModal({
     .sort((a, b) => (b.count || 0) - (a.count || 0))
     .slice(0, 5);
 
-  // Helper to generate canvas
-  const generateCanvas = async () => {
-    if (!cardRef.current) return null;
-    return await html2canvas(cardRef.current, {
-      backgroundColor: '#020617', // slate-950
-      scale: 2, // 2x retina crisp resolution
-      useCORS: true,
-      logging: false
-    });
-  };
-
-  // Copy screenshot directly to system clipboard
-  const handleCopyToClipboard = async () => {
+  // Copy or share screenshot directly
+  const handleCopyOrShare = async () => {
+    if (!cardRef.current || copyStatus === 'copying') return;
     setCopyStatus('copying');
     try {
-      const canvas = await generateCanvas();
-      if (!canvas) throw new Error('Could not render image canvas');
+      const res = await exportOrCopyImage({
+        element: cardRef.current,
+        fileName: `aerolog-top5-stats-${new Date().toISOString().slice(0, 10)}.png`,
+        shareTitle: 'AeroLog Top 5 Flight Stats',
+        shareText: 'My Top 5 Flight Stats passport snapshot generated with AeroLog'
+      });
 
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          setCopyStatus('error');
+      if (!res.ok) {
+        if (res.status === 'aborted') {
+          setCopyStatus('idle');
           return;
         }
+        setCopyStatus('error');
+        setTimeout(() => setCopyStatus('idle'), 3000);
+        return;
+      }
 
-        try {
-          if (navigator.clipboard && window.ClipboardItem) {
-            await navigator.clipboard.write([
-              new ClipboardItem({ 'image/png': blob })
-            ]);
-            setCopyStatus('copied');
-            setTimeout(() => setCopyStatus('idle'), 3000);
-          } else {
-            // Fallback: download if clipboard item API not available
-            handleDownload();
-            setCopyStatus('copied');
-            setTimeout(() => setCopyStatus('idle'), 3000);
-          }
-        } catch (clipErr) {
-          console.warn('Clipboard write failed, downloading file instead:', clipErr);
-          handleDownload();
-          setCopyStatus('copied');
-          setTimeout(() => setCopyStatus('idle'), 3000);
-        }
-      }, 'image/png');
+      setCopyStatus(res.status); // 'copied' | 'shared' | 'downloaded'
+      setTimeout(() => setCopyStatus('idle'), 3500);
     } catch (err) {
       console.error('Snapshot capture failed:', err);
       setCopyStatus('error');
@@ -115,15 +98,13 @@ export default function TopStatsSnapshotModal({
 
   // Download image file
   const handleDownload = async () => {
+    if (!cardRef.current || downloading) return;
     setDownloading(true);
     try {
-      const canvas = await generateCanvas();
-      if (!canvas) return;
-
-      const link = document.createElement('a');
-      link.download = `aerolog-top5-stats-${new Date().toISOString().slice(0, 10)}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      await downloadElementAsImage(
+        cardRef.current,
+        `aerolog-top5-stats-${new Date().toISOString().slice(0, 10)}.png`
+      );
     } catch (err) {
       console.error('Download error:', err);
     } finally {
@@ -147,9 +128,9 @@ export default function TopStatsSnapshotModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Copy Button */}
+            {/* Copy / Share Button */}
             <button
-              onClick={handleCopyToClipboard}
+              onClick={handleCopyOrShare}
               disabled={copyStatus === 'copying'}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 transition active:scale-95 disabled:opacity-50"
             >
@@ -160,8 +141,28 @@ export default function TopStatsSnapshotModal({
                 </>
               ) : copyStatus === 'copied' ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-slate-950" />
+                  <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />
                   <span>Copied to Clipboard!</span>
+                </>
+              ) : copyStatus === 'shared' ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />
+                  <span>Shared!</span>
+                </>
+              ) : copyStatus === 'downloaded' ? (
+                <>
+                  <Download className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Saved PNG!</span>
+                </>
+              ) : copyStatus === 'error' ? (
+                <>
+                  <AlertCircle className="w-3.5 h-3.5 text-red-950" />
+                  <span>Failed to Copy</span>
+                </>
+              ) : isMobileDevice() && canShareFiles() ? (
+                <>
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Share / Copy Image</span>
                 </>
               ) : (
                 <>
@@ -436,7 +437,7 @@ export default function TopStatsSnapshotModal({
         <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Click <strong>Copy Screenshot</strong> to paste image directly anywhere.</span>
+            <span>Click <strong>Copy Screenshot</strong> to copy or share, or <strong>Download</strong> to save the high-res PNG file.</span>
           </div>
           <button
             onClick={onClose}

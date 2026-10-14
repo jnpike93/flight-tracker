@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import html2canvas from 'html2canvas';
 import {
   Sparkles,
   X,
@@ -7,13 +6,17 @@ import {
   Check,
   Download,
   Plane,
-  Globe2,
   MapPin,
-  Calendar,
   Compass,
-  Award,
-  ArrowRight
+  Share2,
+  AlertCircle
 } from 'lucide-react';
+import {
+  exportOrCopyImage,
+  downloadElementAsImage,
+  isMobileDevice,
+  canShareFiles
+} from '../utils/imageExport';
 
 export default function AeroLogWrappedModal({
   isOpen,
@@ -24,7 +27,8 @@ export default function AeroLogWrappedModal({
 }) {
   const years = Object.keys(wrapped).sort().reverse();
   const [selectedYear, setSelectedYear] = useState(years[0] || '2024');
-  const [copyStatus, setCopyStatus] = useState('idle');
+  const [copyStatus, setCopyStatus] = useState('idle'); // 'idle' | 'copying' | 'copied' | 'shared' | 'downloaded' | 'error'
+  const [downloading, setDownloading] = useState(false);
   const cardRef = useRef(null);
 
   if (!isOpen) return null;
@@ -35,72 +39,49 @@ export default function AeroLogWrappedModal({
   const unitAbbr = unit === 'miles' ? 'mi' : 'km';
   const totalDist = unit === 'miles' ? currentYearData.totalMiles : currentYearData.totalKm;
 
-  // Format date helper
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    try {
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        const d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
-        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
-      }
-      return dateStr;
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const handleCopyCard = async () => {
-    if (!cardRef.current) return;
+  const handleCopyOrShare = async () => {
+    if (!cardRef.current || copyStatus === 'copying') return;
     setCopyStatus('copying');
     try {
-      const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: '#020617',
-        scale: 2,
-        useCORS: true,
-        logging: false
+      const res = await exportOrCopyImage({
+        element: cardRef.current,
+        fileName: `aerolog-wrapped-${selectedYear}.png`,
+        shareTitle: `AeroLog Wrapped ${selectedYear}`,
+        shareText: `Check out my ${selectedYear} AeroLog Wrapped flight stats!`
       });
 
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          setCopyStatus('error');
+      if (!res.ok) {
+        if (res.status === 'aborted') {
+          setCopyStatus('idle');
           return;
         }
+        setCopyStatus('error');
+        setTimeout(() => setCopyStatus('idle'), 3000);
+        return;
+      }
 
-        try {
-          if (navigator.clipboard && window.ClipboardItem) {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-            setCopyStatus('copied');
-            setTimeout(() => setCopyStatus('idle'), 3000);
-          } else {
-            handleDownload();
-            setCopyStatus('copied');
-            setTimeout(() => setCopyStatus('idle'), 3000);
-          }
-        } catch {
-          handleDownload();
-          setCopyStatus('copied');
-          setTimeout(() => setCopyStatus('idle'), 3000);
-        }
-      }, 'image/png');
+      setCopyStatus(res.status); // 'copied' | 'shared' | 'downloaded'
+      setTimeout(() => setCopyStatus('idle'), 3500);
     } catch (err) {
-      console.error(err);
+      console.error('Wrapped snapshot capture failed:', err);
       setCopyStatus('error');
       setTimeout(() => setCopyStatus('idle'), 3000);
     }
   };
 
   const handleDownload = async () => {
-    if (!cardRef.current) return;
-    const canvas = await html2canvas(cardRef.current, {
-      backgroundColor: '#020617',
-      scale: 2,
-      useCORS: true
-    });
-    const link = document.createElement('a');
-    link.download = `aerolog-wrapped-${selectedYear}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    if (!cardRef.current || downloading) return;
+    setDownloading(true);
+    try {
+      await downloadElementAsImage(
+        cardRef.current,
+        `aerolog-wrapped-${selectedYear}.png`
+      );
+    } catch (err) {
+      console.error('Download error:', err);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -125,14 +106,39 @@ export default function AeroLogWrappedModal({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleCopyCard}
+              onClick={handleCopyOrShare}
               disabled={copyStatus === 'copying'}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white font-bold text-xs shadow-md shadow-purple-500/20 transition active:scale-95 disabled:opacity-50"
             >
-              {copyStatus === 'copied' ? (
+              {copyStatus === 'copying' ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-white" />
-                  <span>Copied!</span>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Capturing...</span>
+                </>
+              ) : copyStatus === 'copied' ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+                  <span>Copied to Clipboard!</span>
+                </>
+              ) : copyStatus === 'shared' ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+                  <span>Shared!</span>
+                </>
+              ) : copyStatus === 'downloaded' ? (
+                <>
+                  <Download className="w-3.5 h-3.5 text-white" />
+                  <span>Saved PNG!</span>
+                </>
+              ) : copyStatus === 'error' ? (
+                <>
+                  <AlertCircle className="w-3.5 h-3.5 text-white" />
+                  <span>Failed to Copy</span>
+                </>
+              ) : isMobileDevice() && canShareFiles() ? (
+                <>
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Share / Copy Card</span>
                 </>
               ) : (
                 <>
@@ -144,6 +150,7 @@ export default function AeroLogWrappedModal({
 
             <button
               onClick={handleDownload}
+              disabled={downloading}
               className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
               title="Download PNG"
             >
@@ -203,7 +210,7 @@ export default function AeroLogWrappedModal({
               </div>
 
               <div className="text-right">
-                <span className="text-2xl font-black bg-gradient-to-r from-purple-400 via-pink-300 to-cyan-300 bg-clip-text text-transparent font-mono">
+                <span className="text-2xl font-black text-purple-300 font-mono tracking-tight">
                   {selectedYear}
                 </span>
               </div>
