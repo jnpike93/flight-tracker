@@ -63,21 +63,21 @@ function isAdmin(db, email) {
   if (!email) return false;
   const cleanEmail = email.trim().toLowerCase();
 
-  // 1. Primary Dedicated Admin
+  // 1. Primary Dedicated System Administrator
   if (cleanEmail === 'jakepike2011@gmail.com') return true;
 
-  // 2. Env configured admin emails
-  const adminList = (process.env.ADMIN_EMAILS || process.env.ALLOWED_EMAILS || '')
+  // 2. Explicitly configured ADMIN_EMAILS environment variable
+  const adminList = (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map(e => e.trim().toLowerCase())
     .filter(Boolean);
 
   if (adminList.includes(cleanEmail)) return true;
 
-  // 3. Database check (role = 'admin' or initial_setup)
+  // 3. Database check strictly for role = 'admin'
   try {
-    const row = db.prepare('SELECT role, added_by FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
-    if (row && (row.role === 'admin' || row.added_by === 'initial_setup' || row.added_by === 'env')) {
+    const row = db.prepare('SELECT role FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
+    if (row && row.role === 'admin') {
       return true;
     }
   } catch (_) {}
@@ -100,8 +100,12 @@ function isEmailAllowed(db, email) {
 
   // Wildcard domain match (e.g. *@mycompany.com)
   for (const pattern of envAllowed) {
-    if (pattern.startsWith('*@') && cleanEmail.endsWith(pattern.substring(1))) {
-      return true;
+    if (pattern.startsWith('*@')) {
+      const allowedDomain = pattern.slice(2);
+      const emailDomain = cleanEmail.split('@')[1];
+      if (emailDomain && emailDomain === allowedDomain) {
+        return true;
+      }
     }
   }
 
@@ -109,11 +113,13 @@ function isEmailAllowed(db, email) {
   const row = db.prepare('SELECT email FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
   if (row) return true;
 
-  // If NO allowed users exist anywhere yet (first setup), auto-allow the first user and record them as admin
+  // If NO allowed users exist anywhere yet (first setup fallback), auto-allow the first user and record them as admin
   const totalCount = db.prepare('SELECT count(*) as count FROM allowed_users').get().count;
   if (envAllowed.length === 0 && totalCount === 0) {
-    db.prepare('INSERT INTO allowed_users (email, name, added_by) VALUES (?, ?, ?)')
-      .run(cleanEmail, cleanEmail, 'initial_setup');
+    db.prepare(`
+      INSERT INTO allowed_users (email, name, added_by, role)
+      VALUES (?, ?, 'initial_setup', 'admin')
+    `).run(cleanEmail, cleanEmail);
     return true;
   }
 

@@ -16,7 +16,7 @@ import {
   LogOut,
   ChevronDown
 } from 'lucide-react';
-import { importFlights } from '../api';
+import { importFlights, downloadFlightExport } from '../api';
 
 export default function Navbar({
   currentView = 'dashboard',
@@ -41,8 +41,12 @@ export default function Navbar({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showInsightsMenu, setShowInsightsMenu] = useState(false);
 
-  const handleExport = () => {
-    window.location.href = '/api/export';
+  const handleExport = async () => {
+    try {
+      await downloadFlightExport();
+    } catch (err) {
+      alert('Failed to export flights: ' + err.message);
+    }
   };
 
   const handleImportFile = async (e) => {

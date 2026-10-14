@@ -8,6 +8,9 @@ const auth = require('./auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust reverse proxy (e.g. Nginx on production web server)
+app.set('trust proxy', 1);
+
 // 1. HTTP Security Headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -27,7 +30,7 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin.toLowerCase()) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
       callback(null, true);
     } else {
-      callback(new Error('Blocked by CORS policy'));
+      callback(null, false);
     }
   },
   credentials: true
@@ -35,8 +38,17 @@ app.use(cors({
 
 app.use(express.json({ limit: '2mb' }));
 
-// 3. Sensitive Endpoint Rate Limiter
+// 3. Sensitive Endpoint Rate Limiter with automatic expired entry pruning
 const rateLimitMap = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of rateLimitMap.entries()) {
+    if (now > rec.resetAt) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000).unref(); // Runs every 5 minutes without blocking process exit
+
 function createRateLimiter(windowMs = 60 * 1000, maxRequests = 20, message = 'Too many requests, please try again shortly.') {
   return (req, res, next) => {
     const ip = req.ip || req.socket?.remoteAddress || 'unknown-ip';
@@ -290,7 +302,7 @@ app.post('/api/auth/allowed-users', requireAuth, requireAdmin, (req, res) => {
 
     res.status(201).json({ success: true, email: cleanEmail });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to add user: ' + err.message });
+    res.status(500).json({ error: 'Failed to add user. Please verify user details.' });
   }
 });
 
@@ -299,6 +311,11 @@ app.delete('/api/auth/allowed-users/:email', requireAuth, requireAdmin, (req, re
   const targetEmail = req.params.email.trim().toLowerCase();
   if (targetEmail === req.user.email.toLowerCase()) {
     return res.status(400).json({ error: 'You cannot remove your own authorized account' });
+  }
+
+  // Security: Protect primary administrator from removal
+  if (targetEmail === 'jakepike2011@gmail.com') {
+    return res.status(403).json({ error: 'The primary system administrator cannot be removed.' });
   }
 
   db.prepare('DELETE FROM allowed_users WHERE LOWER(email) = ?').run(targetEmail);
@@ -560,30 +577,33 @@ app.post('/api/calendar/confirm-import', requireAuth, (req, res) => {
     let imported = 0;
     const runMany = db.transaction((rows) => {
       for (const f of rows) {
+        if (!f || typeof f !== 'object') continue;
+        if (!f.flight_number || !f.origin_iata || !f.dest_iata) continue;
+
         insert.run({
           user_email: userEmail,
-          flight_number: f.flight_number,
-          airline: f.airline || 'Unknown',
-          airline_code: f.airline_code || '',
-          date: f.date,
-          origin_iata: f.origin_iata,
-          origin_name: f.origin_name || '',
-          origin_city: f.origin_city || '',
-          origin_country: f.origin_country || '',
-          origin_lat: f.origin_lat,
-          origin_lon: f.origin_lon,
-          dest_iata: f.dest_iata,
-          dest_name: f.dest_name || '',
-          dest_city: f.dest_city || '',
-          dest_country: f.dest_country || '',
-          dest_lat: f.dest_lat,
-          dest_lon: f.dest_lon,
-          distance_miles: f.distance_miles || 0,
-          distance_km: f.distance_km || 0,
-          aircraft: f.aircraft || '',
-          flight_class: f.flight_class || 'Economy',
-          seat: f.seat || '',
-          notes: f.notes || (f.rawSummary ? `Imported from Calendar: ${f.rawSummary}` : 'Imported from Calendar')
+          flight_number: String(f.flight_number).trim().slice(0, 30),
+          airline: String(f.airline || 'Unknown').trim().slice(0, 100),
+          airline_code: String(f.airline_code || '').trim().slice(0, 4).toUpperCase(),
+          date: String(f.date || new Date().toISOString().slice(0, 10)).trim().slice(0, 20),
+          origin_iata: String(f.origin_iata).trim().slice(0, 4).toUpperCase(),
+          origin_name: String(f.origin_name || '').trim().slice(0, 120),
+          origin_city: String(f.origin_city || '').trim().slice(0, 80),
+          origin_country: String(f.origin_country || '').trim().slice(0, 80),
+          origin_lat: Number(f.origin_lat) || 0,
+          origin_lon: Number(f.origin_lon) || 0,
+          dest_iata: String(f.dest_iata).trim().slice(0, 4).toUpperCase(),
+          dest_name: String(f.dest_name || '').trim().slice(0, 120),
+          dest_city: String(f.dest_city || '').trim().slice(0, 80),
+          dest_country: String(f.dest_country || '').trim().slice(0, 80),
+          dest_lat: Number(f.dest_lat) || 0,
+          dest_lon: Number(f.dest_lon) || 0,
+          distance_miles: parseInt(f.distance_miles, 10) || 0,
+          distance_km: parseInt(f.distance_km, 10) || 0,
+          aircraft: String(f.aircraft || '').trim().slice(0, 60),
+          flight_class: ['Economy', 'Premium Economy', 'Business', 'First'].includes(f.flight_class) ? f.flight_class : 'Economy',
+          seat: String(f.seat || '').trim().slice(0, 10),
+          notes: String(f.notes || (f.rawSummary ? `Imported from Calendar: ${f.rawSummary}` : 'Imported from Calendar')).trim().slice(0, 2000)
         });
         imported++;
       }
@@ -592,7 +612,8 @@ app.post('/api/calendar/confirm-import', requireAuth, (req, res) => {
     runMany(flights);
     res.json({ success: true, count: imported });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to import calendar flights: ' + err.message });
+    console.error('Error importing calendar flights:', err);
+    res.status(500).json({ error: 'Failed to import calendar flights. Please verify data format.' });
   }
 });
 
@@ -856,12 +877,40 @@ app.put('/api/flights/:id', requireAuth, (req, res) => {
     const existing = db.prepare('SELECT * FROM flights WHERE id = ? AND user_email = ?').get(id, userEmail);
     if (!existing) return res.status(404).json({ error: 'Flight not found or access denied' });
 
-    const orig = db.prepare('SELECT * FROM airports WHERE iata = ?').get((origin_iata || existing.origin_iata).toUpperCase());
-    const dest = db.prepare('SELECT * FROM airports WHERE iata = ?').get((dest_iata || existing.dest_iata).toUpperCase());
+    const origCode = typeof origin_iata === 'string' && origin_iata.trim() ? origin_iata.trim().slice(0, 4).toUpperCase() : existing.origin_iata;
+    const destCode = typeof dest_iata === 'string' && dest_iata.trim() ? dest_iata.trim().slice(0, 4).toUpperCase() : existing.dest_iata;
+
+    const orig = db.prepare('SELECT * FROM airports WHERE iata = ?').get(origCode);
+    const dest = db.prepare('SELECT * FROM airports WHERE iata = ?').get(destCode);
 
     if (!orig || !dest) return res.status(400).json({ error: 'Invalid airport codes' });
 
     const dist = calculateDistance(orig.lat, orig.lon, dest.lat, dest.lon);
+
+    const cleanFlightNumber = typeof flight_number === 'string' && flight_number.trim()
+      ? flight_number.trim().slice(0, 30)
+      : existing.flight_number;
+    const cleanAirline = typeof airline === 'string' && airline.trim()
+      ? airline.trim().slice(0, 100)
+      : existing.airline;
+    const cleanAirlineCode = typeof airline_code === 'string' && airline_code.trim()
+      ? airline_code.trim().slice(0, 4).toUpperCase()
+      : existing.airline_code;
+    const cleanDate = typeof date === 'string' && date.trim()
+      ? date.trim().slice(0, 20)
+      : existing.date;
+    const cleanAircraft = typeof aircraft === 'string'
+      ? aircraft.trim().slice(0, 60)
+      : existing.aircraft;
+    const cleanFlightClass = ['Economy', 'Premium Economy', 'Business', 'First'].includes(flight_class)
+      ? flight_class
+      : existing.flight_class;
+    const cleanSeat = typeof seat === 'string'
+      ? seat.trim().slice(0, 10)
+      : existing.seat;
+    const cleanNotes = typeof notes === 'string'
+      ? notes.trim().slice(0, 2000)
+      : existing.notes;
 
     db.prepare(`
       UPDATE flights SET
@@ -871,10 +920,10 @@ app.put('/api/flights/:id', requireAuth, (req, res) => {
         distance_miles = ?, distance_km = ?, aircraft = ?, flight_class = ?, seat = ?, notes = ?
       WHERE id = ? AND user_email = ?
     `).run(
-      flight_number || existing.flight_number,
-      airline || existing.airline,
-      airline_code || existing.airline_code,
-      date || existing.date,
+      cleanFlightNumber,
+      cleanAirline,
+      cleanAirlineCode,
+      cleanDate,
       orig.iata,
       orig.name,
       orig.city,
@@ -889,10 +938,10 @@ app.put('/api/flights/:id', requireAuth, (req, res) => {
       dest.lon,
       dist.miles,
       dist.km,
-      aircraft !== undefined ? aircraft : existing.aircraft,
-      flight_class || existing.flight_class,
-      seat !== undefined ? seat : existing.seat,
-      notes !== undefined ? notes : existing.notes,
+      cleanAircraft,
+      cleanFlightClass,
+      cleanSeat,
+      cleanNotes,
       id,
       userEmail
     );
@@ -900,7 +949,8 @@ app.put('/api/flights/:id', requireAuth, (req, res) => {
     const updated = db.prepare('SELECT * FROM flights WHERE id = ? AND user_email = ?').get(id, userEmail);
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error updating flight:', err);
+    res.status(500).json({ error: 'Failed to update flight record. Please verify details.' });
   }
 });
 
@@ -1157,11 +1207,12 @@ app.get('/api/stats', requireAuth, (req, res) => {
 // Boarding Pass & Barcode Scanner Parser
 app.post('/api/flights/parse-boarding-pass', requireAuth, (req, res) => {
   const { rawText } = req.body;
-  if (!rawText || !rawText.trim()) {
+  if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
     return res.status(400).json({ error: 'Boarding pass text is required' });
   }
 
-  const text = rawText.trim();
+  // Security: bound length to prevent regex ReDoS on long inputs
+  const text = rawText.trim().slice(0, 4000);
   let parsed = null;
 
   // 1. Try standard IATA Bar Coded Boarding Pass (BCBP) format
@@ -1435,6 +1486,25 @@ if (fs.existsSync(clientDist)) {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
+
+// Fallback for unmatched /api routes
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'NOT_FOUND', message: 'API route not found' });
+});
+
+// Centralized Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled Server Error:', err.message);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(err.status || 500).json({
+    error: 'INTERNAL_ERROR',
+    message: process.env.NODE_ENV === 'production'
+      ? 'An unexpected error occurred.'
+      : (err.message || 'Server error')
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`Flight Tracker backend server running on http://localhost:${PORT}`);

@@ -269,3 +269,37 @@ export async function confirmCalendarImport(flights) {
   return data;
 }
 
+// Download authenticated JSON export
+export async function downloadFlightExport() {
+  const res = await fetch(`${API_BASE}/export`, {
+    headers: authHeaders()
+  });
+  if (!res.ok) {
+    throw new Error('Failed to export flight records');
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `aerolog_flight_export_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+// Parse Boarding Pass
+export async function parseBoardingPass(rawText) {
+  const res = await fetch(`${API_BASE}/flights/parse-boarding-pass`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ rawText: (rawText || '').trim() })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to parse boarding pass');
+  }
+  return data;
+}
+
+

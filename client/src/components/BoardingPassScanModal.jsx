@@ -9,7 +9,7 @@ import {
   Calendar,
   AlertCircle
 } from 'lucide-react';
-import { addFlight, getToken } from '../api';
+import { addFlight, parseBoardingPass } from '../api';
 
 export default function BoardingPassScanModal({
   isOpen,
@@ -31,21 +31,7 @@ export default function BoardingPassScanModal({
     setParsedFlight(null);
 
     try {
-      const token = getToken();
-      const res = await fetch('/api/flights/parse-boarding-pass', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ rawText: rawText.trim() })
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to parse boarding pass');
-      }
-
+      const data = await parseBoardingPass(rawText.trim());
       setParsedFlight(data.flight);
     } catch (err) {
       setError(err.message);
