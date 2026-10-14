@@ -223,7 +223,7 @@ app.get('/api/auth/config', (req, res) => {
   });
 });
 
-// Google OAuth Login
+// Google OAuth Login & Registration Request
 app.post('/api/auth/google', authRateLimiter, async (req, res) => {
   try {
     const { credential } = req.body;
@@ -233,32 +233,49 @@ app.post('/api/auth/google', authRateLimiter, async (req, res) => {
 
     const googleUser = await auth.verifyGoogleToken(credential);
 
-    // Enforce Allowlist
-    if (!auth.isEmailAllowed(db, googleUser.email)) {
-      return res.status(403).json({
-        error: 'ACCESS_DENIED',
-        email: googleUser.email,
-        message: `Access Denied: The Google account "${googleUser.email}" is not authorized to access AeroLog. Please contact the administrator to request access.`
-      });
-    }
-
-    // Record Authenticated Session
-    auth.recordUserLogin(db, {
+    // Record login request or update existing user
+    const userStatus = auth.recordUserLoginRequest(db, {
       email: googleUser.email,
       name: googleUser.name,
       picture: googleUser.picture,
       method: 'google'
     });
 
-    // Generate Session Token
-    const token = auth.generateSessionToken(googleUser, db);
+    // Check approval status
+    if (userStatus === 'pending') {
+      return res.status(200).json({
+        status: 'PENDING_APPROVAL',
+        message: 'Your login request has been submitted to the administrator for manual approval.',
+        user: {
+          email: googleUser.email,
+          name: googleUser.name,
+          picture: googleUser.picture
+        }
+      });
+    }
+
+    if (userStatus === 'rejected') {
+      return res.status(403).json({
+        status: 'REJECTED',
+        error: 'ACCESS_REJECTED',
+        message: 'Your access request was declined by the administrator.',
+        user: {
+          email: googleUser.email
+        }
+      });
+    }
+
+    // User is Approved: Issue Session Token
+    const isUserAdmin = auth.isAdmin(db, googleUser.email);
+    const token = auth.generateSessionToken({ ...googleUser, isAdmin: isUserAdmin }, db);
     res.json({
+      status: 'APPROVED',
       token,
       user: {
         email: googleUser.email,
         name: googleUser.name,
         picture: googleUser.picture,
-        isAdmin: auth.isAdmin(db, googleUser.email)
+        isAdmin: isUserAdmin
       }
     });
   } catch (err) {
@@ -288,32 +305,47 @@ app.post('/api/auth/dev-login', authRateLimiter, (req, res) => {
 
   const cleanEmail = email.trim().toLowerCase();
 
-  // Enforce Allowlist
-  if (!auth.isEmailAllowed(db, cleanEmail)) {
-    return res.status(403).json({
-      error: 'ACCESS_DENIED',
-      email: cleanEmail,
-      message: `Access Denied: The account "${cleanEmail}" is not on the authorized user list.`
-    });
-  }
-
-  // Record Authenticated Session
-  auth.recordUserLogin(db, {
+  // Record login request or update existing user
+  const userStatus = auth.recordUserLoginRequest(db, {
     email: cleanEmail,
     name: name || cleanEmail.split('@')[0],
     picture: '',
     method: 'dev'
   });
 
+  if (userStatus === 'pending') {
+    return res.status(200).json({
+      status: 'PENDING_APPROVAL',
+      message: 'Your login request has been recorded and is awaiting manual administrator approval.',
+      user: {
+        email: cleanEmail,
+        name: name || cleanEmail.split('@')[0],
+        picture: ''
+      }
+    });
+  }
+
+  if (userStatus === 'rejected') {
+    return res.status(403).json({
+      status: 'REJECTED',
+      error: 'ACCESS_REJECTED',
+      message: 'Your access request was declined by the administrator.',
+      user: {
+        email: cleanEmail
+      }
+    });
+  }
+
+  const isUserAdmin = auth.isAdmin(db, cleanEmail);
   const user = {
     email: cleanEmail,
     name: name || cleanEmail.split('@')[0],
     picture: '',
-    isAdmin: auth.isAdmin(db, cleanEmail)
+    isAdmin: isUserAdmin
   };
 
   const token = auth.generateSessionToken(user, db);
-  res.json({ token, user });
+  res.json({ status: 'APPROVED', token, user });
 });
 
 // Get Current User Profile
@@ -381,7 +413,7 @@ app.delete('/api/auth/allowed-users/:email', requireAuth, requireAdmin, (req, re
 
 // ================= ADMIN CONSOLE / USER MANAGEMENT ENDPOINTS =================
 
-// Get All Users with Authentication details and Flight Data aggregations
+// Get All Users with Authentication details, Approval Status, and Flight Data aggregations
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   try {
     // 1. Fetch all records from allowed_users
@@ -391,6 +423,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
         name,
         picture,
         role,
+        status,
         added_at,
         added_by,
         first_login,
@@ -473,6 +506,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
       const isPrimaryAdmin = email === 'jakepike2011@gmail.com';
       const isSystemAdmin = auth.isAdmin(db, email);
       const isAllowed = auth.isEmailAllowed(db, email);
+      const status = isPrimaryAdmin ? 'approved' : (dbUser?.status || (isAllowed ? 'approved' : 'pending'));
 
       const loginCount = dbUser?.login_count || 0;
       const hasAuthenticated = Boolean(loginCount > 0 || dbUser?.last_login);
@@ -483,6 +517,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
         name: dbUser?.name || email.split('@')[0],
         picture: dbUser?.picture || '',
         role: dbUser?.role || (isSystemAdmin ? 'admin' : 'user'),
+        status,
         isAdmin: isSystemAdmin,
         isPrimaryAdmin,
         isAllowed,
@@ -492,7 +527,7 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
         loginCount: loginCount,
         lastLoginMethod: dbUser?.last_login_method || null,
         addedAt: dbUser?.added_at || null,
-        addedBy: dbUser?.added_by || (envAllowed.includes(email) ? '.env' : (hasData ? 'flight_log' : 'allowlist')),
+        addedBy: dbUser?.added_by || (envAllowed.includes(email) ? '.env' : (hasData ? 'flight_log' : 'login_request')),
         flightCount: flightStats.flightCount,
         hasData,
         totalDistanceMiles: flightStats.totalDistanceMiles,
@@ -505,10 +540,12 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
       };
     });
 
-    // Default Sort: Primary Admin first, then authenticated with data, then flights desc
+    // Default Sort: Primary Admin first, then pending approvals (for urgent admin action), then authenticated with data, then flights desc
     users.sort((a, b) => {
       if (a.isPrimaryAdmin) return -1;
       if (b.isPrimaryAdmin) return 1;
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
       if ((a.hasAuthenticated && a.hasData) && !(b.hasAuthenticated && b.hasData)) return -1;
       if (!(a.hasAuthenticated && a.hasData) && (b.hasAuthenticated && b.hasData)) return 1;
       if (a.hasAuthenticated && !b.hasAuthenticated) return -1;
@@ -533,6 +570,9 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
       totalWithData: users.filter(u => u.hasData).length,
       totalAuthenticatedWithData: users.filter(u => u.hasAuthenticated && u.hasData).length,
       totalAdmins: users.filter(u => u.isAdmin).length,
+      pendingApprovalsCount: users.filter(u => u.status === 'pending').length,
+      approvedUsersCount: users.filter(u => u.status === 'approved').length,
+      rejectedUsersCount: users.filter(u => u.status === 'rejected').length,
       totalFlightsSystem,
       totalMilesSystem,
       totalAirportsSystem
@@ -600,28 +640,43 @@ app.get('/api/admin/users/:email/flights', requireAuth, requireAdmin, (req, res)
   }
 });
 
-// Add or invite user directly from Admin Console (Admin only)
+// Add or invite user directly from Admin Console (Admin only - defaults to approved)
 app.post('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
-  const { email, name, role = 'user' } = req.body;
+  const { email, name, role = 'user', status = 'approved' } = req.body;
   if (!email || !email.includes('@')) {
     return res.status(400).json({ error: 'Valid email address is required' });
   }
 
   const cleanEmail = email.trim().toLowerCase();
   const cleanRole = role === 'admin' ? 'admin' : 'user';
+  const cleanStatus = ['approved', 'pending', 'rejected'].includes(status) ? status : 'approved';
 
   try {
     db.prepare(`
-      INSERT INTO allowed_users (email, name, added_by, role)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO allowed_users (email, name, added_by, role, status)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(email) DO UPDATE SET
         name = COALESCE(excluded.name, allowed_users.name),
-        role = excluded.role
-    `).run(cleanEmail, name || cleanEmail.split('@')[0], req.user.email, cleanRole);
+        role = excluded.role,
+        status = excluded.status
+    `).run(cleanEmail, name || cleanEmail.split('@')[0], req.user.email, cleanRole, cleanStatus);
 
-    res.status(201).json({ success: true, email: cleanEmail, role: cleanRole });
+    res.status(201).json({ success: true, email: cleanEmail, role: cleanRole, status: cleanStatus });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add user to allowlist: ' + err.message });
+  }
+});
+
+// Update user approval status (Admin only: Approve, Reject, or Pend)
+app.patch('/api/admin/users/:email/status', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const targetEmail = req.params.email.trim().toLowerCase();
+    const { status } = req.body;
+
+    const result = auth.updateUserStatus(db, targetEmail, status);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Failed to update user approval status' });
   }
 });
 

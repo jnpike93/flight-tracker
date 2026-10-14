@@ -58,9 +58,15 @@ export async function loginWithGoogle(credential) {
     body: JSON.stringify({ credential })
   });
   const data = await res.json();
+
+  if (data.status === 'PENDING_APPROVAL') {
+    return data;
+  }
+
   if (!res.ok) {
     throw new Error(data.message || data.error || 'Google sign-in failed');
   }
+
   setToken(data.token);
   setStoredUser(data.user);
   return data;
@@ -73,9 +79,15 @@ export async function loginWithDev(email, name) {
     body: JSON.stringify({ email, name })
   });
   const data = await res.json();
+
+  if (data.status === 'PENDING_APPROVAL') {
+    return data;
+  }
+
   if (!res.ok) {
     throw new Error(data.message || data.error || 'Sign-in failed');
   }
+
   setToken(data.token);
   setStoredUser(data.user);
   return data;
@@ -360,6 +372,19 @@ export async function removeAdminUser(email) {
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.error || data.message || 'Failed to remove user');
+  }
+  return data;
+}
+
+export async function updateAdminUserStatus(email, status) {
+  const res = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(email)}/status`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ status })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to update user approval status');
   }
   return data;
 }

@@ -14,7 +14,9 @@ import {
   Compass,
   FileText,
   Key,
-  ShieldAlert
+  ShieldAlert,
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 import { loginWithGoogle, loginWithDev } from '../api';
 
@@ -23,12 +25,19 @@ export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) 
   const [loading, setLoading] = useState(false);
   const [devEmail, setDevEmail] = useState('');
   const [devName, setDevName] = useState('');
+  const [pendingApprovalUser, setPendingApprovalUser] = useState(null);
+  const [lastGoogleCredential, setLastGoogleCredential] = useState(null);
 
   const handleGoogleSuccess = async (credentialResponse) => {
     setError(null);
     setLoading(true);
     try {
       const data = await loginWithGoogle(credentialResponse.credential);
+      if (data.status === 'PENDING_APPROVAL') {
+        setPendingApprovalUser(data.user || { email: 'your Google account' });
+        setLastGoogleCredential(credentialResponse.credential);
+        return;
+      }
       onLoginSuccess(data.user);
     } catch (err) {
       console.error('Google login error:', err);
@@ -43,17 +52,31 @@ export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) 
   };
 
   const handleDevSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!devEmail) return;
     setError(null);
     setLoading(true);
     try {
       const data = await loginWithDev(devEmail, devName);
+      if (data.status === 'PENDING_APPROVAL') {
+        setPendingApprovalUser(data.user || { email: devEmail, name: devName });
+        return;
+      }
       onLoginSuccess(data.user);
     } catch (err) {
       setError(err.message || 'Sign in failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCheckApprovalStatus = async () => {
+    if (lastGoogleCredential) {
+      await handleGoogleSuccess({ credential: lastGoogleCredential });
+    } else if (devEmail) {
+      await handleDevSubmit();
+    } else {
+      setPendingApprovalUser(null);
     }
   };
 
@@ -188,8 +211,59 @@ export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) 
                 </div>
               )}
 
-              {/* Google OAuth Section */}
-              {authConfig?.hasGoogleAuth && googleClientId ? (
+              {/* Approval Pending View */}
+              {pendingApprovalUser ? (
+                <div className="space-y-4 text-center animate-in fade-in zoom-in-95">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+                    <Clock className="w-7 h-7 animate-pulse" />
+                  </div>
+
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-mono font-bold uppercase tracking-wider">
+                      Pending Approval
+                    </span>
+                    <h3 className="text-base font-bold text-white mt-2.5">Access Request Submitted</h3>
+                    <p className="text-xs text-slate-300 mt-1 max-w-sm mx-auto leading-relaxed">
+                      Your login request for <span className="text-cyan-300 font-mono font-semibold">{pendingApprovalUser.email}</span> has been received.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs space-y-2">
+                    <div className="flex items-center gap-2 text-slate-300 font-bold">
+                      <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                      <span>Manual Administrator Review</span>
+                    </div>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      To safeguard logbook data, all new user accounts must be approved by the administrator before access is granted.
+                    </p>
+                    <div className="pt-1 text-[11px] text-slate-400 border-t border-slate-800/80">
+                      Contact: <a href="mailto:miloverdrive@protonmail.com" className="text-cyan-400 hover:underline">miloverdrive@protonmail.com</a>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <button
+                      onClick={handleCheckApprovalStatus}
+                      disabled={loading}
+                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                      <span>{loading ? 'Checking approval status...' : 'Check Approval Status'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setPendingApprovalUser(null);
+                        setLastGoogleCredential(null);
+                        setError(null);
+                      }}
+                      className="w-full py-2 px-4 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 text-xs font-medium transition"
+                    >
+                      Sign in with another account
+                    </button>
+                  </div>
+                </div>
+              ) : authConfig?.hasGoogleAuth && googleClientId ? (
                 <GoogleOAuthProvider clientId={googleClientId}>
                   <div className="space-y-4">
                     <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex flex-col items-center justify-center min-h-[75px]">

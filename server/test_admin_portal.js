@@ -155,6 +155,47 @@ async function runTests() {
 
   // Test 6: Primary Admin protection
   assert(auth.isAdmin(db, 'jakepike2011@gmail.com') === true, 'Primary Admin cannot be stripped of admin rights');
+  assert(auth.isEmailApproved(db, 'jakepike2011@gmail.com') === true, 'Primary Admin is always approved');
+  let threwOnAdminDemote = false;
+  try {
+    auth.updateUserStatus(db, 'jakepike2011@gmail.com', 'rejected');
+  } catch (e) {
+    threwOnAdminDemote = true;
+  }
+  assert(threwOnAdminDemote, 'Cannot decline or demote Primary Admin');
+
+  // Test 7: Manual User Approval Workflow
+  const pendingEmail = 'newcomer@example.com';
+  // New sign-in request
+  const newStatus = auth.recordUserLoginRequest(db, {
+    email: pendingEmail,
+    name: 'Newcomer Dev',
+    picture: 'https://example.com/avatar.png',
+    method: 'google'
+  });
+
+  assert(newStatus === 'pending', 'New unknown user initial status is "pending"');
+  assert(auth.getUserStatus(db, pendingEmail) === 'pending', 'getUserStatus returns "pending"');
+  assert(auth.isEmailApproved(db, pendingEmail) === false, 'New user is NOT approved before admin action');
+
+  // Admin approves the user
+  const approvedResult = auth.updateUserStatus(db, pendingEmail, 'approved');
+  assert(approvedResult.status === 'approved', 'updateUserStatus returned approved');
+  assert(auth.isEmailApproved(db, pendingEmail) === true, 'User is now approved');
+
+  // Subsequent login preserves approved status
+  const repeatLoginStatus = auth.recordUserLoginRequest(db, {
+    email: pendingEmail,
+    name: 'Newcomer Dev',
+    picture: 'https://example.com/avatar.png',
+    method: 'google'
+  });
+  assert(repeatLoginStatus === 'approved', 'Subsequent login retains approved status');
+
+  // Admin rejects or suspends user
+  auth.updateUserStatus(db, pendingEmail, 'rejected');
+  assert(auth.isEmailApproved(db, pendingEmail) === false, 'User is blocked after rejection');
+  assert(auth.getUserStatus(db, pendingEmail) === 'rejected', 'getUserStatus returns "rejected"');
 
   console.log(`\nResults: ${passed} passed, ${failed} failed.\n`);
   if (failed > 0) process.exit(1);

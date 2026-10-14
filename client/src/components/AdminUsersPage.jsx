@@ -31,6 +31,7 @@ import {
   fetchAdminUsers,
   fetchAdminUserFlights,
   updateAdminUserRole,
+  updateAdminUserStatus,
   addAdminUser,
   removeAdminUser,
   deleteAdminUserFlights
@@ -156,7 +157,37 @@ export default function AdminUsersPage({ currentUser, onBack }) {
     }
   };
 
-  // Revoke User Access
+  // Approve User Access
+  const handleApproveUser = async (user) => {
+    try {
+      await updateAdminUserStatus(user.email, 'approved');
+      setSuccessMessage(`Approved access for ${user.email}. They can now sign in.`);
+      await loadAdminData(true);
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err) {
+      alert('Failed to approve user: ' + err.message);
+    }
+  };
+
+  // Reject / Decline User Access
+  const handleRejectUser = async (user) => {
+    if (user.isPrimaryAdmin) {
+      alert('The primary system administrator cannot be declined.');
+      return;
+    }
+    if (!window.confirm(`Decline access request for "${user.email}"?`)) return;
+
+    try {
+      await updateAdminUserStatus(user.email, 'rejected');
+      setSuccessMessage(`Declined access request for ${user.email}`);
+      await loadAdminData(true);
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err) {
+      alert('Failed to decline user: ' + err.message);
+    }
+  };
+
+  // Revoke User Access (Delete from database)
   const handleRevokeUser = async (user) => {
     if (user.isPrimaryAdmin) {
       alert('The primary system administrator cannot be revoked.');
@@ -167,13 +198,13 @@ export default function AdminUsersPage({ currentUser, onBack }) {
       return;
     }
 
-    if (!window.confirm(`Revoke access for "${user.email}"? They will no longer be able to log in.`)) {
+    if (!window.confirm(`Revoke and remove "${user.email}" from user records?`)) {
       return;
     }
 
     try {
       await removeAdminUser(user.email);
-      setSuccessMessage(`Revoked access for ${user.email}`);
+      setSuccessMessage(`Removed user record for ${user.email}`);
       await loadAdminData(true);
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
@@ -217,6 +248,12 @@ export default function AdminUsersPage({ currentUser, onBack }) {
 
     // Segmented filters
     switch (activeFilter) {
+      case 'pending':
+        list = list.filter(u => u.status === 'pending');
+        break;
+      case 'approved':
+        list = list.filter(u => u.status === 'approved');
+        break;
       case 'auth_and_data':
         list = list.filter(u => u.hasAuthenticated && u.hasData);
         break;
@@ -228,9 +265,6 @@ export default function AdminUsersPage({ currentUser, onBack }) {
         break;
       case 'admins':
         list = list.filter(u => u.isAdmin);
-        break;
-      case 'pending':
-        list = list.filter(u => !u.hasAuthenticated);
         break;
       case 'all':
       default:
@@ -343,6 +377,32 @@ export default function AdminUsersPage({ currentUser, onBack }) {
 
       {/* Main Admin Content */}
       <main className="max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6 flex-1">
+        {/* Pending Requests Notification Banner */}
+        {data?.summary?.pendingApprovalsCount > 0 && (
+          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-amber-950/20 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                <Clock className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>{data.summary.pendingApprovalsCount} {data.summary.pendingApprovalsCount === 1 ? 'User' : 'Users'} Awaiting Manual Approval</span>
+                </div>
+                <div className="text-xs text-amber-300/80 mt-0.5">
+                  New users who have attempted to log in with Google and are awaiting administrator verification before access is granted.
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setActiveFilter('pending')}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-sm shrink-0 active:scale-95"
+            >
+              Review Pending Requests
+            </button>
+          </div>
+        )}
+
         {/* Success / Error Alerts */}
         {error && (
           <div className="flex items-center gap-2.5 p-3.5 text-xs text-rose-300 bg-rose-950/70 border border-rose-500/40 rounded-2xl shadow-lg">
@@ -361,7 +421,10 @@ export default function AdminUsersPage({ currentUser, onBack }) {
         {/* Aggregate KPI Metric Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
           {/* Total Users */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm relative overflow-hidden group hover:border-slate-700 transition">
+          <div
+            onClick={() => setActiveFilter('all')}
+            className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm relative overflow-hidden group hover:border-slate-700 transition cursor-pointer"
+          >
             <div className="flex items-center justify-between text-slate-400 mb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider">Total Users</span>
               <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
@@ -372,44 +435,57 @@ export default function AdminUsersPage({ currentUser, onBack }) {
               {loading ? '...' : data?.summary?.totalUsers || 0}
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 truncate">
-              <span>Known in allowlist & logs</span>
+              <span>Known accounts</span>
+            </div>
+          </div>
+
+          {/* Pending Approvals (Manual Review Priority) */}
+          <div
+            onClick={() => setActiveFilter('pending')}
+            className={`p-4 rounded-2xl border backdrop-blur-sm relative overflow-hidden group transition cursor-pointer ${
+              (data?.summary?.pendingApprovalsCount || 0) > 0
+                ? 'bg-amber-950/30 border-amber-500/40 shadow-lg shadow-amber-500/10 hover:border-amber-400'
+                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">Pending Review</span>
+              <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black text-amber-300 font-mono">
+              {loading ? '...' : data?.summary?.pendingApprovalsCount || 0}
+            </div>
+            <div className="text-[11px] text-amber-400/80 mt-1 flex items-center gap-1 truncate">
+              <span>{(data?.summary?.pendingApprovalsCount || 0) > 0 ? 'Requires approval' : 'All caught up'}</span>
             </div>
           </div>
 
           {/* Authenticated Users */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm relative overflow-hidden group hover:border-slate-700 transition">
+          <div
+            onClick={() => setActiveFilter('approved')}
+            className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm relative overflow-hidden group hover:border-slate-700 transition cursor-pointer"
+          >
             <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider">Authenticated</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider">Approved Access</span>
               <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
                 <Key className="w-4 h-4" />
               </div>
             </div>
             <div className="text-2xl font-black text-emerald-400 font-mono">
-              {loading ? '...' : data?.summary?.totalAuthenticated || 0}
+              {loading ? '...' : data?.summary?.approvedUsersCount || 0}
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-              <span>Logged into AeroLog</span>
-            </div>
-          </div>
-
-          {/* Users with Data */}
-          <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm relative overflow-hidden group hover:border-slate-700 transition">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider">With Flight Data</span>
-              <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400">
-                <Plane className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-black text-blue-400 font-mono">
-              {loading ? '...' : data?.summary?.totalWithData || 0}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              <span>Users with flights logged</span>
+              <span>Authorized users</span>
             </div>
           </div>
 
           {/* Authenticated AND With Data (The Core Request) */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-950/40 via-slate-900/80 to-slate-900/80 border border-cyan-500/40 backdrop-blur-sm relative overflow-hidden shadow-lg shadow-cyan-500/10">
+          <div
+            onClick={() => setActiveFilter('auth_and_data')}
+            className="p-4 rounded-2xl bg-gradient-to-br from-cyan-950/40 via-slate-900/80 to-slate-900/80 border border-cyan-500/40 backdrop-blur-sm relative overflow-hidden shadow-lg shadow-cyan-500/10 cursor-pointer"
+          >
             <div className="flex items-center justify-between text-cyan-400 mb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" />
@@ -488,6 +564,38 @@ export default function AdminUsersPage({ currentUser, onBack }) {
             </button>
 
             <button
+              onClick={() => setActiveFilter('pending')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+                activeFilter === 'pending'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                  : (data?.summary?.pendingApprovalsCount || 0) > 0
+                    ? 'bg-amber-950/40 text-amber-300 border border-amber-500/40 hover:bg-amber-900/50'
+                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Clock className="w-3 h-3 text-amber-400" />
+              <span>Pending Approval</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">
+                {data?.summary?.pendingApprovalsCount || 0}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveFilter('approved')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+                activeFilter === 'approved'
+                  ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                  : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+              <span>Approved</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
+                {data?.summary?.approvedUsersCount || 0}
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveFilter('auth_and_data')}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
                 activeFilter === 'auth_and_data'
@@ -499,20 +607,6 @@ export default function AdminUsersPage({ currentUser, onBack }) {
               <span>Auth & With Data</span>
               <span className="px-1.5 py-0.2 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono">
                 {data?.summary?.totalAuthenticatedWithData || 0}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveFilter('auth_only')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-                activeFilter === 'auth_only'
-                  ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                  : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-              }`}
-            >
-              <span>Auth Only</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
-                {data ? data.summary.totalAuthenticated - data.summary.totalAuthenticatedWithData : 0}
               </span>
             </button>
 
@@ -724,23 +818,41 @@ export default function AdminUsersPage({ currentUser, onBack }) {
                           )}
                         </td>
 
-                        {/* Role & Allowlist Status */}
+                        {/* Approval Status & Role */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              {user.isAdmin ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] font-semibold">
-                                  <ShieldCheck className="w-3 h-3 text-purple-400" />
-                                  <span>Administrator</span>
+                          <div className="space-y-1.5">
+                            {/* Approval Status Badge */}
+                            <div>
+                              {user.status === 'approved' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Approved</span>
+                                </span>
+                              ) : user.status === 'pending' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold animate-pulse">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <span>Pending Approval</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[10px]">
-                                  <span>Standard User</span>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
+                                  <XCircle className="w-3 h-3 text-rose-400" />
+                                  <span>Declined</span>
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] text-slate-500">
-                              Access: <span className="text-emerald-400 font-medium">Authorized</span>
+
+                            {/* User Role */}
+                            <div>
+                              {user.isAdmin ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[9px] font-semibold">
+                                  <ShieldCheck className="w-2.5 h-2.5 text-purple-400" />
+                                  <span>Administrator</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">
+                                  Standard User
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -748,6 +860,39 @@ export default function AdminUsersPage({ currentUser, onBack }) {
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* If Pending: Quick 1-Click Approve / Decline */}
+                            {user.status === 'pending' && (
+                              <button
+                                onClick={() => handleApproveUser(user)}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1 shadow-md shadow-emerald-500/20 transition active:scale-95"
+                                title="Approve user for immediate application access"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>Approve</span>
+                              </button>
+                            )}
+                            {user.status === 'pending' && !user.isPrimaryAdmin && (
+                              <button
+                                onClick={() => handleRejectUser(user)}
+                                className="p-1.5 rounded-xl bg-slate-800 hover:bg-rose-900/40 text-slate-400 hover:text-rose-300 border border-slate-700 transition"
+                                title="Decline access request"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* If Rejected: Can Re-Approve */}
+                            {user.status === 'rejected' && (
+                              <button
+                                onClick={() => handleApproveUser(user)}
+                                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-950 text-emerald-400 border border-slate-700 flex items-center gap-1 text-[11px] font-semibold transition"
+                                title="Re-approve access"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Approve</span>
+                              </button>
+                            )}
+
                             {/* Inspect Flights CTA */}
                             <button
                               onClick={() => handleInspectUser(user)}
@@ -757,6 +902,17 @@ export default function AdminUsersPage({ currentUser, onBack }) {
                               <Eye className="w-3.5 h-3.5" />
                               <span>Inspect</span>
                             </button>
+
+                            {/* If Approved: Option to Suspend / Revoke */}
+                            {user.status === 'approved' && !user.isPrimaryAdmin && !isSelf && (
+                              <button
+                                onClick={() => handleRejectUser(user)}
+                                className="p-1.5 rounded-xl text-slate-500 hover:text-amber-400 hover:bg-slate-800 transition"
+                                title="Suspend Access (Set to Declined)"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            )}
 
                             {/* Toggle Role (Admin only, not primary admin) */}
                             {!user.isPrimaryAdmin && (
@@ -769,12 +925,12 @@ export default function AdminUsersPage({ currentUser, onBack }) {
                               </button>
                             )}
 
-                            {/* Revoke User Access */}
+                            {/* Delete User */}
                             {!user.isPrimaryAdmin && !isSelf && (
                               <button
                                 onClick={() => handleRevokeUser(user)}
                                 className="p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
-                                title="Revoke Login Access"
+                                title="Permanently delete user record"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1151,3 +1307,4 @@ export default function AdminUsersPage({ currentUser, onBack }) {
     </div>
   );
 }
+

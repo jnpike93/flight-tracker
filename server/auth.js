@@ -22,6 +22,7 @@ function initAuthDb(db) {
       added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       added_by TEXT,
       role TEXT DEFAULT 'user',
+      status TEXT DEFAULT 'pending',
       picture TEXT,
       first_login DATETIME,
       last_login DATETIME,
@@ -37,6 +38,9 @@ function initAuthDb(db) {
 
     if (!colNames.has('role')) {
       db.exec("ALTER TABLE allowed_users ADD COLUMN role TEXT DEFAULT 'user'");
+    }
+    if (!colNames.has('status')) {
+      db.exec("ALTER TABLE allowed_users ADD COLUMN status TEXT DEFAULT 'approved'");
     }
     if (!colNames.has('picture')) {
       db.exec("ALTER TABLE allowed_users ADD COLUMN picture TEXT");
@@ -55,13 +59,14 @@ function initAuthDb(db) {
     }
   } catch (_) {}
 
-  // Explicitly ensure Primary Admin (jakepike2011@gmail.com) is in database with admin role
+  // Explicitly ensure Primary Admin (jakepike2011@gmail.com) is in database with admin role and approved status
   try {
     db.prepare(`
-      INSERT INTO allowed_users (email, name, added_by, role, first_login, last_login, login_count)
-      VALUES ('jakepike2011@gmail.com', 'Jake Pike', 'system', 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+      INSERT INTO allowed_users (email, name, added_by, role, status, first_login, last_login, login_count)
+      VALUES ('jakepike2011@gmail.com', 'Jake Pike', 'system', 'admin', 'approved', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
       ON CONFLICT(email) DO UPDATE SET
         role = 'admin',
+        status = 'approved',
         login_count = CASE WHEN login_count IS NULL OR login_count = 0 THEN 1 ELSE login_count END,
         first_login = COALESCE(first_login, CURRENT_TIMESTAMP),
         last_login = COALESCE(last_login, CURRENT_TIMESTAMP)
@@ -75,8 +80,8 @@ function initAuthDb(db) {
     .filter(Boolean);
 
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO allowed_users (email, name, added_by, role)
-    VALUES (?, ?, 'env', 'user')
+    INSERT OR IGNORE INTO allowed_users (email, name, added_by, role, status)
+    VALUES (?, ?, 'env', 'user', 'approved')
   `);
 
   for (const email of envAllowed) {
@@ -84,15 +89,46 @@ function initAuthDb(db) {
   }
 }
 
-// Record an authenticated user session
-function recordUserLogin(db, { email, name, picture, method = 'google' }) {
-  if (!email) return;
+// Get user approval status: 'approved' | 'pending' | 'rejected' | null
+function getUserStatus(db, email) {
+  if (!email) return null;
+  const cleanEmail = email.trim().toLowerCase();
+
+  // Primary Admin is always approved
+  if (cleanEmail === 'jakepike2011@gmail.com') return 'approved';
+
+  // Environment admin list is always approved
+  const adminList = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (adminList.includes(cleanEmail)) return 'approved';
+
+  try {
+    const row = db.prepare('SELECT status FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
+    if (row && row.status) {
+      return row.status;
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+// Check if user is approved to access the application
+function isEmailApproved(db, email) {
+  return getUserStatus(db, email) === 'approved';
+}
+
+// Record a user login attempt or session and return their approval status
+function recordUserLoginRequest(db, { email, name, picture, method = 'google' }) {
+  if (!email) return null;
   const cleanEmail = email.trim().toLowerCase();
   const isAdminUser = isAdmin(db, cleanEmail);
 
   try {
-    const existing = db.prepare('SELECT email, first_login, login_count FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
+    const existing = db.prepare('SELECT email, status, first_login, login_count FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
     if (existing) {
+      const currentStatus = isAdminUser ? 'approved' : (existing.status || 'pending');
       db.prepare(`
         UPDATE allowed_users
         SET name = COALESCE(?, name),
@@ -100,18 +136,52 @@ function recordUserLogin(db, { email, name, picture, method = 'google' }) {
             last_login = CURRENT_TIMESTAMP,
             first_login = COALESCE(first_login, CURRENT_TIMESTAMP),
             login_count = COALESCE(login_count, 0) + 1,
-            last_login_method = ?
+            last_login_method = ?,
+            status = ?
         WHERE LOWER(email) = ?
-      `).run(name || null, picture || null, method, cleanEmail);
+      `).run(name || null, picture || null, method, currentStatus, cleanEmail);
+
+      return currentStatus;
     } else {
+      // New user registration / login request: set status = 'pending' for manual approval
+      const initialStatus = isAdminUser ? 'approved' : 'pending';
       db.prepare(`
-        INSERT INTO allowed_users (email, name, picture, added_by, role, first_login, last_login, login_count, last_login_method)
-        VALUES (?, ?, ?, 'login', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?)
-      `).run(cleanEmail, name || cleanEmail.split('@')[0], picture || null, isAdminUser ? 'admin' : 'user', method);
+        INSERT INTO allowed_users (email, name, picture, added_by, role, status, first_login, last_login, login_count, last_login_method)
+        VALUES (?, ?, ?, 'login_request', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?)
+      `).run(cleanEmail, name || cleanEmail.split('@')[0], picture || null, isAdminUser ? 'admin' : 'user', initialStatus, method);
+
+      return initialStatus;
     }
   } catch (err) {
-    console.error('Failed to record user login:', err.message);
+    console.error('Failed to record login request:', err.message);
+    return getUserStatus(db, cleanEmail) || 'pending';
   }
+}
+
+// Backward-compatible recordUserLogin
+function recordUserLogin(db, opts) {
+  return recordUserLoginRequest(db, opts);
+}
+
+// Update user approval status (Admin action)
+function updateUserStatus(db, email, status) {
+  if (!email) throw new Error('Email is required');
+  const cleanEmail = email.trim().toLowerCase();
+  if (!['approved', 'pending', 'rejected'].includes(status)) {
+    throw new Error('Invalid status. Must be "approved", "pending", or "rejected".');
+  }
+
+  if (cleanEmail === 'jakepike2011@gmail.com' && status !== 'approved') {
+    throw new Error('The primary system administrator status cannot be altered.');
+  }
+
+  db.prepare(`
+    UPDATE allowed_users
+    SET status = ?
+    WHERE LOWER(email) = ?
+  `).run(status, cleanEmail);
+
+  return { email: cleanEmail, status };
 }
 
 // Check if an email is an administrator
@@ -141,45 +211,10 @@ function isAdmin(db, email) {
   return false;
 }
 
-// Check if an email is authorized
+// Check if an email is authorized & approved
 function isEmailAllowed(db, email) {
   if (!email) return false;
-  const cleanEmail = email.trim().toLowerCase();
-
-  // Check .env allowed list first
-  const envAllowed = (process.env.ALLOWED_EMAILS || '')
-    .split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (envAllowed.includes(cleanEmail)) return true;
-
-  // Wildcard domain match (e.g. *@mycompany.com)
-  for (const pattern of envAllowed) {
-    if (pattern.startsWith('*@')) {
-      const allowedDomain = pattern.slice(2);
-      const emailDomain = cleanEmail.split('@')[1];
-      if (emailDomain && emailDomain === allowedDomain) {
-        return true;
-      }
-    }
-  }
-
-  // Check database allowed_users table
-  const row = db.prepare('SELECT email FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
-  if (row) return true;
-
-  // If NO allowed users exist anywhere yet (first setup fallback), auto-allow the first user and record them as admin
-  const totalCount = db.prepare('SELECT count(*) as count FROM allowed_users').get().count;
-  if (envAllowed.length === 0 && totalCount === 0) {
-    db.prepare(`
-      INSERT INTO allowed_users (email, name, added_by, role)
-      VALUES (?, ?, 'initial_setup', 'admin')
-    `).run(cleanEmail, cleanEmail);
-    return true;
-  }
-
-  return false;
+  return isEmailApproved(db, email);
 }
 
 // Verify Google Token or mock test token
@@ -244,7 +279,7 @@ function requireAuth(db) {
   return (req, res, next) => {
     // If auth is completely disabled via env (optional local development bypass only)
     if (process.env.DISABLE_AUTH === 'true' && process.env.NODE_ENV !== 'production') {
-      req.user = { email: 'admin@local', name: 'Local Admin' };
+      req.user = { email: 'admin@local', name: 'Local Admin', isAdmin: true };
       return next();
     }
 
@@ -259,9 +294,16 @@ function requireAuth(db) {
       return res.status(401).json({ error: 'INVALID_TOKEN', message: 'Session expired or invalid. Please sign in again.' });
     }
 
-    // Verify user is still in the allowlist
-    if (!isEmailAllowed(db, decoded.email)) {
-      return res.status(403).json({ error: 'ACCESS_REVOKED', message: 'Your account access has been revoked.' });
+    // Verify user is approved
+    const status = getUserStatus(db, decoded.email);
+    if (status !== 'approved') {
+      return res.status(403).json({
+        error: 'ACCESS_NOT_APPROVED',
+        status: status || 'pending',
+        message: status === 'rejected'
+          ? 'Your access request has been declined by the administrator.'
+          : 'Your account is awaiting manual approval from the administrator.'
+      });
     }
 
     req.user = decoded;
@@ -286,11 +328,15 @@ module.exports = {
   initAuthDb,
   isAdmin,
   isEmailAllowed,
+  isEmailApproved,
+  getUserStatus,
+  recordUserLoginRequest,
+  recordUserLogin,
+  updateUserStatus,
   verifyGoogleToken,
   generateSessionToken,
   verifySessionToken,
   requireAuth,
-  requireAdmin,
-  recordUserLogin
+  requireAdmin
 };
 
