@@ -145,9 +145,9 @@ export default function TermsOfService({ onBack }) {
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-3">
             <Mail className="w-5 h-5 text-cyan-400 shrink-0" />
             <div>
-              <div className="font-bold text-sm text-white">Jake Pike (AeroLog Administrator)</div>
-              <a href="mailto:jakepike2011@gmail.com" className="text-xs font-mono text-cyan-400 hover:underline">
-                jakepike2011@gmail.com
+              <div className="font-bold text-sm text-white">Admin (AeroLog Administrator)</div>
+              <a href="mailto:miloverdrive@protonmail.com" className="text-xs font-mono text-cyan-400 hover:underline">
+                miloverdrive@protonmail.com
               </a>
             </div>
           </div>

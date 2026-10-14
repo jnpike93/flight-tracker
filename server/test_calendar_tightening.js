@@ -73,3 +73,4 @@ for (const ev of legitEvents) {
 }
 
 console.log(`\nLegitimate Flights Score: ${legitPass} / ${legitEvents.length}`);
+
