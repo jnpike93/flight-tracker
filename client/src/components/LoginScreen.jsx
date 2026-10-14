@@ -62,8 +62,8 @@ export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) 
       <div className="relative w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl p-8 backdrop-blur-xl">
         {/* Logo & Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-xl shadow-cyan-500/25 mb-4">
-            <Plane className="w-7 h-7 text-white" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl overflow-hidden shadow-2xl shadow-cyan-500/30 border border-cyan-500/40 mb-4 bg-slate-900">
+            <img src="/logo-120.png" alt="AeroLog Flight Tracker" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white m-0">AeroLog</h1>
           <p className="text-xs text-slate-400 mt-1">Private Flight Tracker & 3D Mileage Globe</p>

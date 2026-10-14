@@ -75,8 +75,8 @@ export default function Navbar({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
         {/* Brand & Mode Switch */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25 shrink-0">
-            <Plane className="w-5 h-5 text-slate-950 font-bold" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-cyan-500/25 border border-cyan-500/40 shrink-0 bg-slate-900">
+            <img src="/logo-120.png" alt="AeroLog" className="w-full h-full object-cover" />
           </div>
           <div>
             <div className="flex items-center gap-2">

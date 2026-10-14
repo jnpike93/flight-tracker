@@ -8,8 +8,8 @@ export default function TermsOfService({ onBack }) {
       <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25 shrink-0">
-              <Plane className="w-5 h-5 text-slate-950 font-bold" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-lg shadow-cyan-500/25 border border-cyan-500/40 shrink-0 bg-slate-900">
+              <img src="/logo-120.png" alt="AeroLog" className="w-full h-full object-cover" />
             </div>
             <div>
               <span className="font-black text-lg text-white">AeroLog</span>
@@ -168,3 +168,4 @@ export default function TermsOfService({ onBack }) {
     </div>
   );
 }
+
