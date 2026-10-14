@@ -202,7 +202,7 @@ export default function App() {
           />
 
           {/* Dynamic Content View based on Navigation Tab */}
-          {currentView === 'map' ? (
+          {currentView === 'dashboard' || currentView === 'map' ? (
             /* Visual Map / Globe + Flight Logbook Split */
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-start">
               {/* Map / Globe View (7-8 cols on desktop) */}

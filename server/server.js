@@ -108,6 +108,14 @@ const authRateLimiter = createRateLimiter(60 * 1000, 15, 'Too many authenticatio
 const dbPath = path.join(__dirname, 'flight_tracker.db');
 const db = new Database(dbPath);
 
+// High-performance SQLite configuration for concurrent queries
+try {
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('temp_store = MEMORY');
+  db.pragma('cache_size = -64000'); // 64MB cache
+} catch (_) {}
+
 // Ensure base tables and columns exist on startup
 function initFlightDb(db) {
   db.exec(`

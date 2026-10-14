@@ -102,17 +102,19 @@ export default function GlobeView({ flights = [], selectedFlight = null, onSelec
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const globe = new Globe(containerRef.current)
+    // Use WebGL renderer with high performance preference
+    const globe = new Globe(containerRef.current, {
+      rendererConfig: { antialias: true, powerPreference: 'high-performance' }
+    })
+      .backgroundColor('rgba(2, 6, 23, 1)')
       .globeImageUrl(
         earthTheme === 'night'
           ? '//unpkg.com/three-globe/example/img/earth-night.jpg'
           : '//unpkg.com/three-globe/example/img/earth-blue-marble.jpg'
       )
-      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-      .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
       .showAtmosphere(true)
       .atmosphereColor('#38bdf8')
-      .atmosphereAltitude(0.2)
+      .atmosphereAltitude(0.18)
       // Arcs
       .arcColor('color')
       .arcStroke('stroke')
@@ -166,8 +168,13 @@ export default function GlobeView({ flights = [], selectedFlight = null, onSelec
           </div>
         `;
       })
-      // Rings for Airport pulses
-      .ringsData(airportsData.filter((a) => a.count >= 2))
+      // Rings for Airport pulses (top 15 major hubs only to keep frame rate silky at 60fps)
+      .ringsData(
+        airportsData
+          .filter((a) => a.count >= 2)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 15)
+      )
       .ringLat('lat')
       .ringLng('lon')
       .ringColor(() => (t) => `rgba(56, 189, 248, ${Math.sqrt(1 - t)})`)
@@ -181,18 +188,31 @@ export default function GlobeView({ flights = [], selectedFlight = null, onSelec
 
     globeInstanceRef.current = globe;
 
-    const handleResize = () => {
+    const updateSize = () => {
       if (containerRef.current && globeInstanceRef.current) {
-        globeInstanceRef.current.width(containerRef.current.clientWidth);
-        globeInstanceRef.current.height(containerRef.current.clientHeight);
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        if (w > 0 && h > 0) {
+          globeInstanceRef.current.width(w);
+          globeInstanceRef.current.height(h);
+        }
       }
     };
 
-    window.addEventListener('resize', handleResize);
-    setTimeout(handleResize, 100);
+    updateSize();
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(containerRef.current);
+    window.addEventListener('resize', updateSize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateSize);
+      if (globeInstanceRef.current) {
+        try {
+          globeInstanceRef.current._destructor();
+        } catch (_) {}
+        globeInstanceRef.current = null;
+      }
     };
   }, []);
 
@@ -225,7 +245,12 @@ export default function GlobeView({ flights = [], selectedFlight = null, onSelec
   useEffect(() => {
     if (globeInstanceRef.current) {
       globeInstanceRef.current.pointsData(airportsData);
-      globeInstanceRef.current.ringsData(airportsData.filter((a) => a.count >= 2));
+      globeInstanceRef.current.ringsData(
+        airportsData
+          .filter((a) => a.count >= 2)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 15)
+      );
     }
   }, [airportsData]);
 

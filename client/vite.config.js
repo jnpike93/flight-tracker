@@ -14,5 +14,23 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  build: {
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/three') || id.includes('node_modules/globe.gl') || id.includes('node_modules/three-globe')) {
+            return 'three-vendor';
+          }
+          if (id.includes('node_modules/leaflet')) {
+            return 'leaflet-vendor';
+          }
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/lucide-react')) {
+            return 'react-vendor';
+          }
+        }
+      }
+    }
   }
 })
