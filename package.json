@@ -9,7 +9,8 @@
     "client": "npm run dev --prefix client",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\"",
     "build": "npm run build --prefix client",
-    "seed": "node server/seed_airports.js"
+    "seed": "node server/seed_airports.js",
+    "test": "node server/test_safeguards.js && node server/test_calendar_tightening.js"
   },
   "keywords": [],
   "author": "",

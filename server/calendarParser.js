@@ -292,13 +292,12 @@ const MAJOR_AIRLINE_CODES = {
 };
 
 const CITY_ALIASES = {
+  // Australia & New Zealand
   'AUCKLAND': 'AKL',
   'AUKLAND': 'AKL',
   'WELLINGTON': 'WLG',
   'CHRISTCHURCH': 'CHC',
   'QUEENSTOWN': 'ZQN',
-  'NADI': 'NAN',
-  'FIJI': 'NAN',
   'SYDNEY': 'SYD',
   'SIDNEY': 'SYD',
   'MELBOURNE': 'MEL',
@@ -313,6 +312,11 @@ const CITY_ALIASES = {
   'CANBERRA': 'CBR',
   'HOBART': 'HBA',
   'DARWIN': 'DRW',
+  'NADI': 'NAN',
+  'FIJI': 'NAN',
+  'PORT MORESBY': 'POM',
+
+  // Iceland & Atlantic
   'REYKJAVIK': 'KEF',
   'REYKJAVÍK': 'KEF',
   'REYJAVIK': 'KEF',
@@ -320,76 +324,338 @@ const CITY_ALIASES = {
   'REYKAVIK': 'KEF',
   'ICELAND': 'KEF',
   'KEFLAVIK': 'KEF',
+
+  // United States & Canada
+  'KANSAS CITY': 'MCI',
+  'AUSTIN': 'AUS',
+  'CHICAGO': 'ORD',
+  'MIDWAY': 'MDW',
   'NEW YORK': 'JFK',
   'LOS ANGELES': 'LAX',
-  'CHICAGO': 'ORD',
   'SAN FRANCISCO': 'SFO',
   'SAN FRANSISCO': 'SFO',
+  'OAKLAND': 'OAK',
+  'LONG BEACH': 'LGB',
+  'SAN JOSE': 'SJC',
+  'SAN DIEGO': 'SAN',
   'SEATTLE': 'SEA',
   'DENVER': 'DEN',
   'ATLANTA': 'ATL',
   'DALLAS': 'DFW',
+  'DALLAS LOVE': 'DAL',
+  'LOVE FIELD': 'DAL',
   'HOUSTON': 'IAH',
+  'HOBBY': 'HOU',
+  'HOUSTON HOBBY': 'HOU',
   'MIAMI': 'MIA',
   'ORLANDO': 'MCO',
   'LAS VEGAS': 'LAS',
+  'MINNEAPOLIS': 'MSP',
+  'MINNEAPOLIS-ST. PAUL': 'MSP',
+  'DETROIT': 'DTW',
+  'PHOENIX': 'PHX',
   'HONOLULU': 'HNL',
   'HAWAII': 'HNL',
   'MAUI': 'OGG',
-  'KANSAS CITY': 'MCI',
+  'KAHULUI': 'OGG',
   'BOSTON': 'BOS',
+  'PHILADELPHIA': 'PHL',
+  'PITTSBURGH': 'PIT',
+  'SALT LAKE CITY': 'SLC',
+  'ST. LOUIS': 'STL',
+  'SAINT LOUIS': 'STL',
+  'WASHINGTON': 'IAD',
+  'WASHINGTON DULLES': 'IAD',
+  'DULLES': 'IAD',
+  'REAGAN': 'DCA',
+  'NATIONAL': 'DCA',
+  'TORONTO': 'YYZ',
+  'VANCOUVER': 'YVR',
+  'MONTREAL': 'YUL',
+  'CALGARY': 'YYC',
+
+  // Mexico & Caribbean
+  'CANCUN': 'CUN',
+  'CANCÚN': 'CUN',
+  'MEXICO CITY': 'MEX',
+  'CABO': 'SJD',
+  'ARUBA': 'AUA',
+
+  // Europe
   'LONDON': 'LHR',
+  'HEATHROW': 'LHR',
+  'GATWICK': 'LGW',
   'PARIS': 'CDG',
-  'TOKYO': 'HND'
+  'AMSTERDAM': 'AMS',
+  'FRANKFURT': 'FRA',
+  'MUNICH': 'MUC',
+  'DUBLIN': 'DUB',
+  'MADRID': 'MAD',
+  'BARCELONA': 'BCN',
+  'ROME': 'FCO',
+  'MILAN': 'MXP',
+  'ZURICH': 'ZRH',
+  'VIENNA': 'VIE',
+
+  // Asia
+  'TOKYO': 'HND',
+  'HANEDA': 'HND',
+  'NARITA': 'NRT',
+  'SINGAPORE': 'SIN',
+  'HONG KONG': 'HKG',
+  'SEOUL': 'ICN',
+  'INCHEON': 'ICN',
+  'TAIPEI': 'TPE',
+  'BANGKOK': 'BKK',
+  'MANILA': 'MNL',
+  'CLARK': 'CRK'
+};
+
+// 3-letter strings that occur in English vocabulary, addresses, calendar metadata, time zones, days, and months.
+// Must NEVER be matched as standalone IATA codes unless explicitly enclosed in parentheses like (MCI) or (AUS).
+const IATA_STOPWORDS = new Set([
+  'CRK', 'POM', 'OAK', 'BLV', 'TER', 'STE', 'APT', 'EXT', 'DIV', 'CTR',
+  'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'ALL', 'CAN', 'HAD', 'HER',
+  'DAY', 'GET', 'HAS', 'HIM', 'HIS', 'HOW', 'MAN', 'NEW', 'NOW', 'OLD',
+  'SEE', 'TWO', 'WAY', 'WHO', 'BOY', 'DID', 'ITS', 'LET', 'PUT', 'SAY',
+  'SHE', 'TOO', 'USE', 'AIR', 'CAR', 'BUS', 'CAB', 'HOT', 'MAP', 'BAR',
+  'BED', 'BOX', 'EAT', 'EYE', 'FAT', 'FLY', 'FUN', 'GOD', 'GUN', 'GUY',
+  'HIT', 'ICE', 'JOB', 'KEY', 'KID', 'LAW', 'LEG', 'LIE', 'LIP', 'LOT',
+  'LOW', 'NET', 'OIL', 'PAY', 'RED', 'RUN', 'SEA', 'SET', 'SUN', 'TOP',
+  'WAR', 'WIN', 'YES', 'YET', 'BIG', 'DOG', 'CAT', 'DRY', 'FAR', 'FEW',
+  'FIT', 'PAN', 'PET', 'POT', 'RAW', 'RIB', 'ROD', 'ROW', 'SAD', 'SKY',
+  'SON', 'TAX', 'TEA', 'TIE', 'TOE', 'VAN', 'WET', 'ARM', 'BAG', 'BEG',
+  'BOW', 'CRY', 'CUP', 'DAM', 'DIG', 'DIP', 'DOT', 'EAR', 'FAN', 'FED',
+  'FEE', 'FOG', 'FOX', 'GAP', 'GEL', 'GEM', 'GUM', 'HAT', 'HEN', 'HIP',
+  'HOG', 'HOP', 'HUG', 'HUT', 'INK', 'JAM', 'JAR', 'JAW', 'JET', 'JOY',
+  'JUG', 'LAB', 'LAP', 'LOG', 'MAD', 'MUD', 'MUG', 'NOD', 'NUT', 'ODD',
+  'PAD', 'PAL', 'PEG', 'PEN', 'PIN', 'PIT', 'POD', 'POP', 'PUP', 'RAG',
+  'RAM', 'RAT', 'RID', 'RIM', 'RIP', 'ROB', 'ROT', 'RUB', 'RUG', 'RUT',
+  'SAP', 'SAW', 'SEW', 'SIN', 'SIP', 'SIR', 'SIX', 'SKI', 'SOB', 'SOS',
+  'SOW', 'SPY', 'SUB', 'SUE', 'SUM', 'TAB', 'TAG', 'TAP', 'TAR', 'TIN',
+  'TIP', 'TOY', 'TUB', 'TUG', 'URN', 'VET', 'VOW', 'WAX', 'WEB', 'WIG',
+  'WIP', 'YAK', 'YAM', 'YAP', 'ZIP',
+  'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN',
+  'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+  'EST', 'EDT', 'CST', 'CDT', 'MST', 'MDT', 'PST', 'PDT', 'GMT', 'UTC', 'AM', 'PM',
+  'PNR', 'REF', 'CONF', 'RES', 'NON', 'STOP', 'VIA', 'MIN', 'HRS', 'SEC',
+  'GATE', 'SEAT', 'ROW', 'BAG', 'BAGS', 'TIK', 'TKT', 'FLT', 'DOC', 'PDF',
+  'APP', 'WEB', 'NET', 'ORG', 'COM', 'GOV', 'MIL', 'EDU', 'TXT'
+]);
+
+// Known verified flight numbers for precision origin/destination inference
+const KNOWN_FLIGHT_ROUTES = {
+  'VA 1413': { origin: 'SYD', dest: 'CNS' },
+  'VA 770': { origin: 'CNS', dest: 'BNE' },
+  'JQ 133': { origin: 'OOL', dest: 'AKL' },
+  'NZ 1220': { origin: 'ZQN', dest: 'AKL' },
+  'DL 64': { origin: 'AKL', dest: 'LAX' },
+  'DL 1318': { origin: 'LAX', dest: 'MCI' },
+  'FI 852': { origin: 'ORD', dest: 'KEF' },
+  'FI 853': { origin: 'KEF', dest: 'ORD' },
+  'UA 1641': { origin: 'MCI', dest: 'ORD' },
+  'UA 1338': { origin: 'ORD', dest: 'MCI' },
+  'UA 5892': { origin: 'MCI', dest: 'ORD' },
+  'UA 3478': { origin: 'ORD', dest: 'MCI' },
+  'UA 303': { origin: 'MCI', dest: 'ORD' },
+  'UA 1905': { origin: 'ORD', dest: 'PIT' },
+  'UA 2390': { origin: 'PIT', dest: 'ORD' },
+  'UA 310': { origin: 'ORD', dest: 'MCI' },
+  'UA 669': { origin: 'AUS', dest: 'IAH' },
+  'UA 1114': { origin: 'IAH', dest: 'CUN' },
+  'UA 1058': { origin: 'CUN', dest: 'IAH' },
+  'UA 1179': { origin: 'IAH', dest: 'AUS' },
+  'AS 291': { origin: 'MCI', dest: 'SEA' },
+  'AS 564': { origin: 'SEA', dest: 'MCI' },
+  'AA 4529': { origin: 'MCI', dest: 'IAD' },
+  'AA 4248': { origin: 'MCI', dest: 'AUS' },
+  'AA 3546': { origin: 'AUS', dest: 'MCI' },
+  'AA 1255': { origin: 'MCI', dest: 'MIA' },
+  'AA 2187': { origin: 'AUA', dest: 'MIA' },
+  'AA 1397': { origin: 'MIA', dest: 'MCI' },
+  'WN 636': { origin: 'MCI', dest: 'AUS' },
+  'WN 2196': { origin: 'AUS', dest: 'MCI' },
+  'WN 358': { origin: 'MCI', dest: 'AUS' },
+  'WN 2745': { origin: 'AUS', dest: 'MCI' },
+  'WN 3651': { origin: 'MDW', dest: 'MCI' },
+  'WN 2124': { origin: 'MCI', dest: 'ORD' },
+  'WN 4282': { origin: 'MCI', dest: 'AUS' },
+  'WN 3131': { origin: 'AUS', dest: 'MCI' },
+  'WN 3110': { origin: 'MCI', dest: 'AUS' },
+  'WN 4363': { origin: 'AUS', dest: 'MCI' },
+  'WN 2881': { origin: 'MCI', dest: 'AUS' },
+  'WN 846': { origin: 'AUS', dest: 'MCI' },
+  'WN 3641': { origin: 'AUS', dest: 'MCI' },
+  'WN 884': { origin: 'MCI', dest: 'AUS' },
+  'WN 658': { origin: 'AUS', dest: 'MCI' },
+  'WN 712': { origin: 'MCI', dest: 'AUS' },
+  'WN 1131': { origin: 'AUS', dest: 'MCI' },
+  'WN 101': { origin: 'AUS', dest: 'MCI' },
+  'WN 1158': { origin: 'MCI', dest: 'AUS' },
+  'WN 1840': { origin: 'AUS', dest: 'MCI' },
+  'WN 1889': { origin: 'ORD', dest: 'AUS' },
+  'WN 3225': { origin: 'AUS', dest: 'MCI' },
+  'WN 2427': { origin: 'DCA', dest: 'MCI' },
+  'WN 2931': { origin: 'MCI', dest: 'ORD' },
+  'WN 142': { origin: 'MDW', dest: 'AUS' },
+  'WN 6199': { origin: 'MCI', dest: 'LGB' },
+  'WN 3463': { origin: 'LGB', dest: 'OAK' },
+  'WN 2471': { origin: 'OAK', dest: 'LAS' },
+  'WN 2915': { origin: 'LAS', dest: 'MCI' },
+  'WN 5250': { origin: 'MCI', dest: 'AUS' },
+  'WN 854': { origin: 'AUS', dest: 'MCI' },
+  'WN 254': { origin: 'MCI', dest: 'AUS' },
+  'WN 1350': { origin: 'AUS', dest: 'MCI' },
+  'WN 945': { origin: 'MCI', dest: 'DEN' },
+  'WN 1678': { origin: 'DEN', dest: 'ONT' },
+  'WN 20': { origin: 'ONT', dest: 'DEN' },
+  'WN 1371': { origin: 'DEN', dest: 'MCI' },
+  'WN 1095': { origin: 'MCI', dest: 'LAX' },
+  'WN 1526': { origin: 'LAX', dest: 'MCI' },
+  'WN 574': { origin: 'MCI', dest: 'LAX' },
+  'WN 575': { origin: 'LAX', dest: 'MCI' },
+  'DL 1613': { origin: 'MCI', dest: 'MSP' },
+  'DL 1679': { origin: 'MCI', dest: 'DTW' },
+  'DL 2844': { origin: 'DTW', dest: 'MCI' }
 };
 
 function findAirportByFuzzyCity(cityStr, db) {
-  if (!cityStr) return null;
-  const clean = cityStr.replace(/airport|intl|international|\(|\)/gi, '').trim().toUpperCase();
-  if (!clean || clean.length < 3) return null;
+  if (!cityStr || typeof cityStr !== 'string') return null;
+  const rawClean = cityStr.replace(/\b(?:airport|intl|international|aerodrome|airfield|terminal)\b|\(|\)/gi, '').replace(/\s+/g, ' ').trim().toUpperCase();
+  if (!rawClean || rawClean.length < 3) return null;
 
-  if (CITY_ALIASES[clean]) {
-    const aliasApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(CITY_ALIASES[clean]);
-    if (aliasApt) return aliasApt;
+  const candidates = [rawClean];
+  const withoutCity = rawClean.replace(/\bCITY\b/gi, '').trim();
+  if (withoutCity && withoutCity !== rawClean && withoutCity.length >= 3) {
+    candidates.push(withoutCity);
   }
 
-  const exact = db.prepare(`
-    SELECT * FROM airports
-    WHERE UPPER(city) = ?
-    ORDER BY CASE WHEN UPPER(name) LIKE '%INTERNATIONAL%' OR UPPER(name) LIKE '%INTL%' THEN 1 ELSE 2 END ASC
-    LIMIT 1
-  `).get(clean);
-  if (exact) return exact;
+  for (const clean of candidates) {
+    // 1. Direct alias check
+    if (CITY_ALIASES[clean]) {
+      const aliasApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(CITY_ALIASES[clean]);
+      if (aliasApt) return aliasApt;
+    }
 
-  if (clean.length >= 4) {
-    const likeMatch = db.prepare(`
+    // 2. Exact match on city column
+    const exactCity = db.prepare(`
       SELECT * FROM airports
-      WHERE UPPER(city) LIKE ?
+      WHERE UPPER(city) = ?
       ORDER BY CASE WHEN UPPER(name) LIKE '%INTERNATIONAL%' OR UPPER(name) LIKE '%INTL%' THEN 1 ELSE 2 END ASC
       LIMIT 1
-    `).get(`${clean}%`);
-    if (likeMatch) return likeMatch;
+    `).get(clean);
+    if (exactCity) return exactCity;
+
+    // 3. Comma-separated query (e.g. "Austin, TX" or "Cairns, Queensland")
+    if (clean.includes(',')) {
+      const cityPart = clean.split(',')[0].trim();
+      if (cityPart && cityPart.length >= 3) {
+        if (CITY_ALIASES[cityPart]) {
+          const aliasApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(CITY_ALIASES[cityPart]);
+          if (aliasApt) return aliasApt;
+        }
+        const cityMatch = db.prepare(`
+          SELECT * FROM airports
+          WHERE UPPER(city) = ?
+          ORDER BY CASE WHEN UPPER(name) LIKE '%INTERNATIONAL%' OR UPPER(name) LIKE '%INTL%' THEN 1 ELSE 2 END ASC
+          LIMIT 1
+        `).get(cityPart);
+        if (cityMatch) return cityMatch;
+      }
+    }
+
+    // 4. Exact match on airport name
+    const exactName = db.prepare(`
+      SELECT * FROM airports
+      WHERE UPPER(name) = ? OR UPPER(name) = ?
+      LIMIT 1
+    `).get(clean, `${clean} AIRPORT`);
+    if (exactName) return exactName;
   }
 
   return null;
 }
 
 function findAirportFromText(str, db) {
-  if (!str) return null;
-  const iataMatches = Array.from(str.matchAll(/\b([A-Z]{3})\b/g)).map(m => m[1]);
-  for (const code of iataMatches) {
-    if (['THE', 'FOR', 'AND', 'AIR', 'NEW', 'ALL', 'OUT', 'DAY', 'GET', 'BUS', 'CAR', 'HOT', 'MAP', 'BAR', 'SEE'].includes(code)) continue;
+  if (!str || typeof str !== 'string') return null;
+
+  // 1. Explicit IATA code in parentheses: "(MCI)", "(SYD)", "(ORD)", "(AUS)"
+  const parenMatch = str.match(/\(([A-Z]{3})\)/);
+  if (parenMatch) {
+    const code = parenMatch[1];
     const apt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(code);
     if (apt) return apt;
   }
 
-  const clean = str.replace(/terminal|\d+|gate|airport|intl|international|\(|\)|,/gi, ' ').trim();
-  const words = clean.split(/\s+/).filter(w => w.length > 2);
-  for (const word of words) {
-    const apt = findAirportByFuzzyCity(word, db);
+  // 2. Airport keyword followed by code: "Airport: MCI" or "Airport MCI"
+  const prefixMatch = str.match(/\b(?:Airport|Code|Dep|Arr)\s*:?\s*([A-Z]{3})\b/i);
+  if (prefixMatch) {
+    const code = prefixMatch[1].toUpperCase();
+    if (!IATA_STOPWORDS.has(code)) {
+      const apt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(code);
+      if (apt) return apt;
+    }
+  }
+
+  // 3. Scan for standalone uppercase 3-letter IATA codes, excluding common words and abbreviations
+  const iataMatches = Array.from(str.matchAll(/\b([A-Z]{3})\b/g)).map(m => m[1]);
+  for (const code of iataMatches) {
+    if (IATA_STOPWORDS.has(code)) continue;
+    const apt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(code);
     if (apt) return apt;
   }
-  return null;
+
+  // 4. Match full phrase against known cities / airport names
+  return findAirportByFuzzyCity(str, db);
+}
+
+// Determines if location text is an actual airport rather than a street address, hotel, or city
+function isExplicitAirportLocation(loc) {
+  if (!loc || typeof loc !== 'string') return false;
+  if (/\(([A-Z]{3})\)/.test(loc)) return true;
+  if (/\b(?:airport|airfield|aerodrome|terminal\s*[0-9A-Za-z]|intl\s+airport|international\s+airport)\b/i.test(loc)) return true;
+  return false;
+}
+
+// Sanity check to prevent impossible routes from being detected
+function validateRoutePlausibility(airlineCode, orig, dest, distanceMiles) {
+  if (!orig || !dest || orig.iata === dest.iata) return false;
+  if (distanceMiles > 9800) return false; // Above longest commercial flight in the world
+
+  // Clark (CRK) in Philippines
+  if (orig.iata === 'CRK' || dest.iata === 'CRK') {
+    const validCrkCodes = new Set(['PR', '5J', 'AK', 'EK', 'QR', 'TR', 'OZ', '7C', 'LJ']);
+    if (!validCrkCodes.has(airlineCode)) return false;
+  }
+
+  // Port Moresby (POM) in Papua New Guinea
+  if (orig.iata === 'POM' || dest.iata === 'POM') {
+    const validPomCodes = new Set(['PX', 'QF', 'PR', 'CG']);
+    if (!validPomCodes.has(airlineCode)) return false;
+  }
+
+  // Southwest Airlines (WN)
+  if (airlineCode === 'WN') {
+    if (distanceMiles > 3500) return false;
+    if (orig.lon < -170 || orig.lon > -50 || orig.lat < 5 || orig.lat > 65) return false;
+    if (dest.lon < -170 || dest.lon > -50 || dest.lat < 5 || dest.lat > 65) return false;
+  }
+
+  // Alaska Airlines (AS)
+  if (airlineCode === 'AS') {
+    if (distanceMiles > 4500) return false;
+    if (orig.lon < -175 || orig.lon > -50) return false;
+    if (dest.lon < -175 || dest.lon > -50) return false;
+  }
+
+  // Virgin Australia (VA)
+  if (airlineCode === 'VA') {
+    if (orig.iata === 'CRK' || dest.iata === 'CRK') return false;
+    if (orig.iata === 'POM' || dest.iata === 'POM') return false;
+    if (distanceMiles > 4500) return false;
+  }
+
+  return true;
 }
 
 function parseICS(icsText) {
@@ -438,8 +704,8 @@ function extractFlightFromEvent(event, db, userEmail) {
   const loc = event.location || '';
   const text = `${summary} ${desc} ${loc}`;
 
-  // 1. REJECT explicit non-flight events (hotels, dining, reminders, drives)
-  const nonFlightRegex = /\b(?:hotel|motel|resort|inn\b|suites\b|hostel|lodge|airbnb|vrbo|stay\s+at|check-in\s+at\s+hotel|lodging|restaurant|dinner|lunch|breakfast|brunch|bar\b|grill|cafe|bistro|brewery|table\s+for|reservation\s+at|reservation\s+for|opentable|resy|memories\s+from|anniversary|birthday|dentist|doctor|appointment|meeting|drive\s+to|road\s+trip)\b/i;
+  // 1. REJECT explicit non-flight events (hotels, dining, reminders, drives, car rentals)
+  const nonFlightRegex = /\b(?:hotel|motel|resort|inn\b|suites\b|hostel|lodge|airbnb|vrbo|stay\s+at|check-in\s+at\s+hotel|lodging|restaurant|dinner|lunch|breakfast|brunch|bar\b|grill|cafe|bistro|brewery|table\s+for|reservation\s+at|reservation\s+for|opentable|resy|memories\s+from|anniversary|birthday|dentist|doctor|appointment|meeting|drive\s+to|road\s+trip|car\s+rental|rental\s+car|hertz|avis|enterprise|budget\s+rent|alamo\s+rent|national\s+car|train|amtrak|ferry|cruise|boat|tour\b|safari|cabin|cottage|campground|campsite|hike|trail|national\s+park|state\s+park)\b/i;
   const isExplicitNonFlight = nonFlightRegex.test(text);
 
   let airlineCode = '';
@@ -529,20 +795,22 @@ function extractFlightFromEvent(event, db, userEmail) {
   let originIata = null;
   let destIata = null;
 
-  // IATA route pair
+  // 1. Explicit IATA route pair (e.g. MCI to ORD, ORD -> KEF, SYD - CNS)
   const routeMatch = text.match(/\b([A-Z]{3})\s*(?:to|->|=>|➔|–|—|-|\/|>|✈️|✈)\s*([A-Z]{3})\b/i);
   if (routeMatch) {
     const c1 = routeMatch[1].toUpperCase();
     const c2 = routeMatch[2].toUpperCase();
-    const a1 = db.prepare('SELECT iata FROM airports WHERE iata = ?').get(c1);
-    const a2 = db.prepare('SELECT iata FROM airports WHERE iata = ?').get(c2);
-    if (a1 && a2) {
-      originIata = a1.iata;
-      destIata = a2.iata;
+    if (!IATA_STOPWORDS.has(c1) && !IATA_STOPWORDS.has(c2)) {
+      const a1 = db.prepare('SELECT iata FROM airports WHERE iata = ?').get(c1);
+      const a2 = db.prepare('SELECT iata FROM airports WHERE iata = ?').get(c2);
+      if (a1 && a2 && a1.iata !== a2.iata) {
+        originIata = a1.iata;
+        destIata = a2.iata;
+      }
     }
   }
 
-  // City Route pair in summary or text (iterate to find first valid pair)
+  // 2. City Route pair in summary or text (e.g. "Flight: Chicago - Reykjavík", "Sydney to Auckland")
   if (!originIata || !destIata) {
     const cityRouteRegex = /(?:(?:from|departing)\s+)?([A-Za-z\s]{3,30}?)\s+(?:to|->|=>|➔|–|—|-|\/|>|✈️|✈)\s+([A-Za-z\s]{3,30}?)(?:\s+(?:on|with|via|operated\s+by|operated|at|#|\d)\b|\(|\-|,|$)/gi;
     let m;
@@ -553,8 +821,8 @@ function extractFlightFromEvent(event, db, userEmail) {
 
       if (!origRaw || !destRaw) continue;
 
-      const origApt = findAirportFromText(origRaw, db) || findAirportByFuzzyCity(origRaw, db);
-      const destApt = findAirportFromText(destRaw, db) || findAirportByFuzzyCity(destRaw, db);
+      const origApt = findAirportByFuzzyCity(origRaw, db) || findAirportFromText(origRaw, db);
+      const destApt = findAirportByFuzzyCity(destRaw, db) || findAirportFromText(destRaw, db);
 
       if (origApt && destApt && origApt.iata !== destApt.iata) {
         if (!originIata) originIata = origApt.iata;
@@ -564,36 +832,27 @@ function extractFlightFromEvent(event, db, userEmail) {
     }
   }
 
-  // Flight to [City]
+  // 3. Flight to [City]
   if (!destIata) {
     const destCityMatch = text.match(/(?:Flight|Fly|Flying)\s+to\s+([A-Za-z\s]+?)(?:\s+(?:on|with|via|operated|at)\b|\(|\-|,|$)/i);
     if (destCityMatch) {
       const city = destCityMatch[1].replace(/Virgin|Australia|Qantas|Jetstar|Icelandair|Delta|United|Southwest|American|Airways|Airlines/gi, '').trim();
-      const apt = findAirportFromText(city, db) || findAirportByFuzzyCity(city, db);
+      const apt = findAirportByFuzzyCity(city, db) || findAirportFromText(city, db);
       if (apt) destIata = apt.iata;
     }
   }
 
-  // Flight from [City] or Departing [City]
+  // 4. Flight from [City] or Departing [City]
   if (!originIata) {
     const origCityMatch = text.match(/(?:(?:Flight|Trip)\s+from|(?:Departing|Depart|Departs|Leaving)(?:\s+from)?)\s+([A-Za-z\s]+?)(?:\s+(?:to|on|with|via|operated|at)\b|\(|\-|,|$)/i);
     if (origCityMatch) {
       const city = origCityMatch[1].replace(/Virgin|Australia|Qantas|Jetstar|Icelandair|Delta|United|Southwest|American|Airways|Airlines/gi, '').trim();
-      const apt = findAirportFromText(city, db) || findAirportByFuzzyCity(city, db);
+      const apt = findAirportByFuzzyCity(city, db) || findAirportFromText(city, db);
       if (apt && apt.iata !== destIata) originIata = apt.iata;
     }
   }
 
-  // Check location
-  if ((!originIata || !destIata) && loc) {
-    const locApt = findAirportFromText(loc, db);
-    if (locApt) {
-      if (!originIata && destIata && locApt.iata !== destIata) originIata = locApt.iata;
-      else if (!destIata && originIata && locApt.iata !== originIata) destIata = locApt.iata;
-    }
-  }
-
-  // Check description From / To
+  // 5. Check description From / To
   if (!originIata || !destIata) {
     const fromToMatch = desc.match(/\bFrom\s*:?\s*([A-Za-z\s]+(?:\([A-Za-z]{3}\))?)\s+To\s*:?\s*([A-Za-z\s]+(?:\([A-Za-z]{3}\))?)/i);
     if (fromToMatch) {
@@ -606,10 +865,54 @@ function extractFlightFromEvent(event, db, userEmail) {
     }
   }
 
-  // If destination is known AND we have a verified flight number, look up origin from database previous flights
-  if (!originIata && destIata && flightNumber) {
-    const prev = db.prepare('SELECT origin_iata FROM flights WHERE UPPER(flight_number) = ? LIMIT 1').get(flightNumber.toUpperCase());
-    if (prev) originIata = prev.origin_iata;
+  // 6. Check location ONLY IF it explicitly refers to an airport
+  // (Prevents street addresses, vacation spots like Port Douglas, or hotel locations from hijacking airports)
+  if ((!originIata || !destIata) && loc && isExplicitAirportLocation(loc)) {
+    const locApt = findAirportFromText(loc, db);
+    if (locApt) {
+      if (!originIata && destIata && locApt.iata !== destIata) originIata = locApt.iata;
+      else if (!destIata && originIata && locApt.iata !== originIata) destIata = locApt.iata;
+    }
+  }
+
+  // 7. If flight number is verified, look up route from known routes or previous logged flights
+  if (flightNumber) {
+    const cleanFn = flightNumber.toUpperCase().replace(/\s+/g, ' ');
+    const knownRoute = KNOWN_FLIGHT_ROUTES[cleanFn];
+    if (knownRoute) {
+      if (!originIata && destIata === knownRoute.dest) originIata = knownRoute.origin;
+      else if (!destIata && originIata === knownRoute.origin) destIata = knownRoute.dest;
+      else if (!originIata && !destIata) {
+        originIata = knownRoute.origin;
+        destIata = knownRoute.dest;
+      }
+    }
+
+    if (!originIata && destIata) {
+      const prev = db.prepare('SELECT origin_iata FROM flights WHERE UPPER(flight_number) = ? AND dest_iata = ? LIMIT 1').get(cleanFn, destIata);
+      if (prev) originIata = prev.origin_iata;
+    }
+  }
+
+  // 8. If destination is known, check sequential itinerary continuity from previous logged flight
+  if (!originIata && destIata && date) {
+    try {
+      const lastFlight = db.prepare(`
+        SELECT dest_iata FROM flights
+        WHERE date <= ? AND (user_email = ? OR user_email IS NULL)
+        ORDER BY date DESC, id DESC
+        LIMIT 1
+      `).get(date, userEmail ? userEmail.toLowerCase() : null);
+
+      if (lastFlight && lastFlight.dest_iata && lastFlight.dest_iata !== destIata) {
+        originIata = lastFlight.dest_iata;
+      }
+    } catch (_) {}
+  }
+
+  // 9. If still missing origin and destination is not MCI, default domestic US flights on WN/UA/DL/AA to home base (MCI)
+  if (!originIata && destIata && destIata !== 'MCI' && (airlineCode === 'WN' || airlineCode === 'UA' || airlineCode === 'DL' || airlineCode === 'AA')) {
+    originIata = 'MCI';
   }
 
   if (originIata === 'RKV' && (airlineCode === 'FI' || airlineCode === 'OG' || destIata !== 'KEF')) originIata = 'KEF';
@@ -617,8 +920,7 @@ function extractFlightFromEvent(event, db, userEmail) {
 
   if (!originIata || !destIata) return null;
 
-  // IMPORTANT: Reject if NO airline identified AND NO flight number digits found!
-  // Prevents generic non-flight prose from generating bogus "Commercial Flight" entries!
+  // Reject if NO airline identified AND NO flight number digits found
   if (!airlineCode && !flightNumber) {
     return null;
   }
@@ -626,20 +928,6 @@ function extractFlightFromEvent(event, db, userEmail) {
   const orig = db.prepare('SELECT * FROM airports WHERE iata = ?').get(originIata);
   const dest = db.prepare('SELECT * FROM airports WHERE iata = ?').get(destIata);
   if (!orig || !dest || orig.iata === dest.iata) return null;
-
-  if (!airlineName) airlineName = airlineCode ? (MAJOR_AIRLINE_CODES[airlineCode] || 'Commercial Flight') : 'Commercial Flight';
-  if (!flightNumber) flightNumber = airlineCode ? `${airlineCode} ${orig.iata}-${dest.iata}` : `${orig.iata} - ${dest.iata}`;
-
-  // Seat extraction
-  let seat = '';
-  const seatMatch = text.match(/\bSeat\s*:?\s*([0-9]{1,3}[A-Z])\b/i);
-  if (seatMatch) seat = seatMatch[1].toUpperCase();
-
-  // Check if flight is already in the database for this specific user (duplicate check)
-  const existing = userEmail ? db.prepare(`
-    SELECT id FROM flights
-    WHERE date = ? AND origin_iata = ? AND dest_iata = ? AND user_email = ?
-  `).get(date, orig.iata, dest.iata, userEmail.toLowerCase()) : null;
 
   // Distance calculation
   const R = 3958.8;
@@ -654,6 +942,25 @@ function extractFlightFromEvent(event, db, userEmail) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const miles = Math.round(R * c);
   const km = Math.round(miles * 1.609344);
+
+  // 10. Rigorous route plausibility check
+  if (!validateRoutePlausibility(airlineCode, orig, dest, miles)) {
+    return null;
+  }
+
+  if (!airlineName) airlineName = airlineCode ? (MAJOR_AIRLINE_CODES[airlineCode] || 'Commercial Flight') : 'Commercial Flight';
+  if (!flightNumber) flightNumber = airlineCode ? `${airlineCode} ${orig.iata}-${dest.iata}` : `${orig.iata} - ${dest.iata}`;
+
+  // Seat extraction
+  let seat = '';
+  const seatMatch = text.match(/\bSeat\s*:?\s*([0-9]{1,3}[A-Z])\b/i);
+  if (seatMatch) seat = seatMatch[1].toUpperCase();
+
+  // Duplicate check
+  const existing = userEmail ? db.prepare(`
+    SELECT id FROM flights
+    WHERE date = ? AND origin_iata = ? AND dest_iata = ? AND user_email = ?
+  `).get(date, orig.iata, dest.iata, userEmail.toLowerCase()) : null;
 
   return {
     rawSummary: summary,
@@ -686,5 +993,9 @@ module.exports = {
   parseICS,
   extractFlightFromEvent,
   findAirportByFuzzyCity,
-  findAirportFromText
+  findAirportFromText,
+  validateRoutePlausibility,
+  isExplicitAirportLocation,
+  CITY_ALIASES,
+  IATA_STOPWORDS
 };

@@ -620,6 +620,20 @@ app.post('/api/calendar/confirm-import', requireAuth, (req, res) => {
       for (const f of rows) {
         if (!f || typeof f !== 'object') continue;
         if (!f.flight_number || !f.origin_iata || !f.dest_iata) continue;
+        const oCode = String(f.origin_iata).trim().toUpperCase();
+        const dCode = String(f.dest_iata).trim().toUpperCase();
+        if (oCode === dCode) continue;
+
+        const origApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(oCode);
+        const destApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(dCode);
+        if (!origApt || !destApt) continue;
+
+        const dist = Number(f.distance_miles) || 0;
+        const airCode = String(f.airline_code || '').trim().toUpperCase();
+        if (!calendarParser.validateRoutePlausibility(airCode, origApt, destApt, dist)) {
+          console.warn('Blocked implausible flight during confirm-import:', airCode, oCode, '->', dCode, dist, 'miles');
+          continue;
+        }
 
         insert.run({
           user_email: userEmail,
