@@ -326,25 +326,26 @@ export default function AdminUsersPage({ currentUser, onBack }) {
       {/* Top Navigation & Subheader */}
       <header className="border-b border-slate-800 bg-slate-950/90 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onBack}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 transition"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 transition shrink-0"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Flights</span>
+              <span className="hidden sm:inline">Back to Flights</span>
+              <span className="sm:hidden">Back</span>
             </button>
             <div className="h-5 w-[1px] bg-slate-800 hidden sm:block" />
-            <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                <Shield className="w-5 h-5" />
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+                <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-white m-0">
-                    AeroLog Admin Console
+                  <h1 className="text-sm sm:text-lg font-black tracking-tight text-white m-0">
+                    Admin Console
                   </h1>
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hidden sm:inline-block">
                     User & Data Directory
                   </span>
                 </div>
@@ -355,21 +356,22 @@ export default function AdminUsersPage({ currentUser, onBack }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => loadAdminData(true)}
               disabled={refreshing}
               title="Refresh Data"
-              className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition disabled:opacity-50"
+              className="p-1.5 sm:p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
             <button
               onClick={() => setIsAddUserOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 rounded-xl shadow-lg shadow-cyan-500/20 transition active:scale-95"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 rounded-xl shadow-lg shadow-cyan-500/20 transition active:scale-95 shrink-0"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Grant Access</span>
+              <span className="hidden sm:inline">Grant Access</span>
+              <span className="sm:hidden">Grant</span>
             </button>
           </div>
         </div>

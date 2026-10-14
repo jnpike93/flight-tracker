@@ -318,14 +318,14 @@ export default function StatsCards({
           </div>
         </div>
 
-        {/* 2. Landmark Flight Milestones (Visible at a glance with clear dates, times, and routes!) */}
+        {/* 2. Landmark Flight Milestones (Swipeable on mobile, grid on tablet/desktop) */}
         {(stats.earliestFlight || stats.latestFlight || stats.longestFlight || stats.shortestFlight) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-2.5 border-t border-slate-800/80 mt-2.5">
+          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-2.5 border-t border-slate-800/80 mt-2.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none snap-x">
             {/* First Flight Logged */}
             {stats.earliestFlight && (
               <div
                 onClick={() => handleOpenDetail('milestones')}
-                className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-cyan-500/50 transition cursor-pointer group flex flex-col justify-between"
+                className="min-w-[240px] sm:min-w-0 snap-start flex-1 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-cyan-500/50 transition cursor-pointer group flex flex-col justify-between"
                 title="Click to view flight distance spectrum chart"
               >
                 <div>
@@ -367,7 +367,7 @@ export default function StatsCards({
             {stats.latestFlight && (
               <div
                 onClick={() => handleOpenDetail('milestones')}
-                className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-emerald-500/50 transition cursor-pointer group flex flex-col justify-between"
+                className="min-w-[240px] sm:min-w-0 snap-start flex-1 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-emerald-500/50 transition cursor-pointer group flex flex-col justify-between"
                 title="Click to view flight distance spectrum chart"
               >
                 <div>
@@ -409,7 +409,7 @@ export default function StatsCards({
             {stats.longestFlight && (
               <div
                 onClick={() => handleOpenDetail('milestones')}
-                className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-500/50 transition cursor-pointer group flex flex-col justify-between"
+                className="min-w-[240px] sm:min-w-0 snap-start flex-1 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-500/50 transition cursor-pointer group flex flex-col justify-between"
                 title="Click to view flight distance spectrum chart"
               >
                 <div>
@@ -446,7 +446,7 @@ export default function StatsCards({
             {stats.shortestFlight && (
               <div
                 onClick={() => handleOpenDetail('milestones')}
-                className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-purple-500/50 transition cursor-pointer group flex flex-col justify-between"
+                className="min-w-[240px] sm:min-w-0 snap-start flex-1 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-purple-500/50 transition cursor-pointer group flex flex-col justify-between"
                 title="Click to view flight distance spectrum chart"
               >
                 <div>

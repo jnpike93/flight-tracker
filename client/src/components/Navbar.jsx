@@ -263,21 +263,21 @@ export default function Navbar({
 
         {/* Right Actions & User Profile */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Scan Boarding Pass Button */}
+          {/* Scan Boarding Pass Button (Tablet & Desktop) */}
           <button
             onClick={onOpenScanModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl transition"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl transition"
             title="Scan Boarding Pass Barcode or Text"
           >
             <QrCode className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden xl:inline">Scan Pass</span>
           </button>
 
-          {/* Sync Calendar Button */}
+          {/* Sync Calendar Button (Tablet & Desktop) */}
           <button
             onClick={onOpenCalendarModal}
             title="Sync Google Calendar"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl transition"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl transition"
           >
             <Calendar className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden xl:inline">Sync Calendar</span>
@@ -286,10 +286,11 @@ export default function Navbar({
           {/* Add Flight Primary CTA */}
           <button
             onClick={onOpenAddModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 rounded-xl shadow-lg shadow-cyan-500/20 transition active:scale-95"
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 rounded-xl shadow-lg shadow-cyan-500/20 transition active:scale-95 shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Add Flight</span>
+            <span className="hidden sm:inline">Add Flight</span>
+            <span className="sm:hidden">Add</span>
           </button>
 
           {/* User Profile / Menu */}

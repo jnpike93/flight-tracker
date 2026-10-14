@@ -51,7 +51,7 @@ export default function FlightList({ flights = [], selectedFlight, onSelectFligh
   }, [flights, searchTerm, yearFilter, airlineFilter]);
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col h-full">
+    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl flex flex-col h-full">
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div>
