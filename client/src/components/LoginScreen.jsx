@@ -77,47 +77,11 @@ export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) 
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black">
       {/* Clean Top Navigation Bar */}
       <header className="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg overflow-hidden shadow-md shadow-cyan-500/20 border border-cyan-500/30 shrink-0 bg-slate-900">
-              <img src="/logo-120.png" alt="AeroLog Flight Tracker" className="w-full h-full object-cover" />
-            </div>
-            <span className="text-base font-bold tracking-tight text-white">AeroLog</span>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg overflow-hidden shadow-md shadow-cyan-500/20 border border-cyan-500/30 shrink-0 bg-slate-900">
+            <img src="/logo-120.png" alt="AeroLog Flight Tracker" className="w-full h-full object-cover" />
           </div>
-
-          {/* Navigation Links */}
-          <nav className="flex items-center gap-3 sm:gap-5 text-xs">
-            <a
-              href="/privacy"
-              onClick={(e) => {
-                if (onNavigate) {
-                  e.preventDefault();
-                  onNavigate('/privacy');
-                }
-              }}
-              className="text-slate-400 hover:text-white transition"
-            >
-              Privacy Policy
-            </a>
-            <a
-              href="/termsofservice"
-              onClick={(e) => {
-                if (onNavigate) {
-                  e.preventDefault();
-                  onNavigate('/termsofservice');
-                }
-              }}
-              className="text-slate-400 hover:text-white transition hidden sm:inline"
-            >
-              Terms of Service
-            </a>
-            <a
-              href="#signin"
-              className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold transition text-xs"
-            >
-              Sign In
-            </a>
-          </nav>
+          <span className="text-base font-bold tracking-tight text-white">AeroLog</span>
         </div>
       </header>
 
