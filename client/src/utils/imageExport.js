@@ -1,4 +1,4 @@
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 
 /**
  * Detect whether the client is a mobile device (iOS, Android, iPadOS).
@@ -26,7 +26,8 @@ export function canShareFiles() {
 }
 
 /**
- * Render a DOM element to an HTML5 Canvas using html2canvas with optimal settings.
+ * Render a DOM element to an HTML5 Canvas using html2canvas-pro with optimal settings.
+ * html2canvas-pro includes full support for modern CSS color spaces like oklch() used in Tailwind v4.
  */
 export async function renderElementToCanvas(element, customOptions = {}) {
   if (!element) throw new Error('Target element is null or undefined');
@@ -55,9 +56,7 @@ export async function renderElementToCanvas(element, customOptions = {}) {
       allowTaint: false,
       logging: false,
       scrollX: 0,
-      scrollY: 0,
-      windowWidth: element.scrollWidth || undefined,
-      windowHeight: element.scrollHeight || undefined
+      scrollY: 0
     };
 
     return await html2canvas(element, { ...defaultOptions, ...customOptions });
@@ -92,6 +91,7 @@ export function downloadBlob(blob, fileName) {
   a.style.display = 'none';
   a.href = url;
   a.download = fileName;
+  a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {
@@ -116,10 +116,10 @@ export async function downloadElementAsImage(element, fileName = 'aerolog-snapsh
  * Strategies:
  * 1. On mobile devices with Web Share API file support:
  *    Triggers native OS Share Sheet (which provides "Copy", "Save Image", Messages, etc.).
- * 2. On desktop (Chrome 124+, Safari, Edge):
- *    Synchronously writes a ClipboardItem Promise to preserve the user-activation token.
- * 3. Fallback for older Chromium / Firefox:
- *    Attempts direct Blob Clipboard write, then Web Share, and finally direct Blob download.
+ * 2. On desktop (Chrome, Safari, Edge, Firefox):
+ *    - Safari: Uses synchronous ClipboardItem(Promise<Blob>) to satisfy WebKit gesture constraints.
+ *    - Chrome/Edge: Writes ClipboardItem(Blob) directly or falls back to file download.
+ *    - Firefox/Restricted: When clipboard image writing is blocked by browser policy, saves image directly to Downloads.
  *
  * Returns: { ok: boolean, status: 'copied' | 'shared' | 'downloaded' | 'aborted' | 'error', error?: any }
  */
@@ -132,6 +132,14 @@ export async function exportOrCopyImage({
 }) {
   if (!element) return { ok: false, status: 'error', error: new Error('Element missing') };
 
+  if (typeof window !== 'undefined' && window.focus) {
+    try {
+      window.focus();
+    } catch {
+      // ignore
+    }
+  }
+
   const isMobile = isMobileDevice();
   const hasShare = canShareFiles();
 
@@ -139,10 +147,11 @@ export async function exportOrCopyImage({
   // On iOS Safari / Android Chrome, opening the native share sheet allows the user
   // to tap "Copy", "Save Image" to Photos, or share directly to any app.
   if (isMobile && hasShare) {
+    let capturedBlob = null;
     try {
       const canvas = await renderElementToCanvas(element, options);
-      const blob = await canvasToBlob(canvas);
-      const file = new File([blob], fileName, { type: 'image/png' });
+      capturedBlob = await canvasToBlob(canvas);
+      const file = new File([capturedBlob], fileName, { type: 'image/png' });
 
       await navigator.share({
         files: [file],
@@ -156,102 +165,81 @@ export async function exportOrCopyImage({
         return { ok: false, status: 'aborted' };
       }
       console.warn('Mobile Web Share failed, falling back to download:', shareErr);
-      // Fallback: If share threw, download the image directly
-      try {
-        const canvas = await renderElementToCanvas(element, options);
-        const blob = await canvasToBlob(canvas);
-        downloadBlob(blob, fileName);
+      if (capturedBlob) {
+        downloadBlob(capturedBlob, fileName);
         return { ok: true, status: 'downloaded' };
-      } catch (dlErr) {
-        return { ok: false, status: 'error', error: dlErr };
       }
+      return { ok: false, status: 'error', error: shareErr };
     }
   }
 
-  // STRATEGY 2: Desktop Clipboard with Promise<Blob> (Safari & Chromium 124+)
-  // Safari strictly demands `navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })])`
-  // called synchronously within the user gesture before the async canvas render finishes.
-  if (typeof window !== 'undefined' && navigator.clipboard && typeof window.ClipboardItem !== 'undefined') {
-    let capturedBlob = null;
-    const blobPromise = (async () => {
-      const canvas = await renderElementToCanvas(element, options);
-      const blob = await canvasToBlob(canvas);
-      capturedBlob = blob;
-      return blob;
-    })();
+  // STRATEGY 2: Desktop Clipboard with fallback
+  let renderedBlob = null;
 
+  // We initiate the async render
+  const blobPromise = (async () => {
+    const canvas = await renderElementToCanvas(element, options);
+    const blob = await canvasToBlob(canvas);
+    renderedBlob = blob;
+    return blob;
+  })();
+
+  // In Safari (WebKit) and modern Chromium:
+  // Test if ClipboardItem accepts a Promise constructor synchronously inside the click gesture
+  if (typeof window !== 'undefined' && navigator.clipboard && typeof window.ClipboardItem !== 'undefined') {
     try {
-      // Test if ClipboardItem accepts a Promise constructor without throwing
       const item = new ClipboardItem({ 'image/png': blobPromise });
       await navigator.clipboard.write([item]);
       return { ok: true, status: 'copied' };
     } catch (promiseClipErr) {
-      console.warn('ClipboardItem promise write did not succeed:', promiseClipErr);
+      console.warn('ClipboardItem promise write did not succeed, awaiting direct blob:', promiseClipErr);
+    }
+  }
 
-      // Wait for blob promise if not yet resolved
-      try {
-        if (!capturedBlob) {
-          capturedBlob = await blobPromise;
-        }
+  // Await the rendered blob for direct methods
+  try {
+    if (!renderedBlob) {
+      renderedBlob = await blobPromise;
+    }
+  } catch (renderErr) {
+    console.error('Snapshot rendering failed:', renderErr);
+    return { ok: false, status: 'error', error: renderErr };
+  }
 
-        // Try direct blob write (for Chromium <124 where Promise in ClipboardItem throws TypeError)
-        const directItem = new ClipboardItem({ 'image/png': capturedBlob });
-        await navigator.clipboard.write([directItem]);
-        return { ok: true, status: 'copied' };
-      } catch (directClipErr) {
-        console.warn('Direct blob clipboard write failed:', directClipErr);
+  // Try direct blob clipboard write
+  if (typeof window !== 'undefined' && navigator.clipboard && typeof window.ClipboardItem !== 'undefined') {
+    try {
+      const directItem = new ClipboardItem({ 'image/png': renderedBlob });
+      await navigator.clipboard.write([directItem]);
+      return { ok: true, status: 'copied' };
+    } catch (directClipErr) {
+      console.warn('Direct blob clipboard write failed (browser may restrict clipboard images):', directClipErr);
+    }
+  }
 
-        // Try Web Share if available on desktop (e.g. macOS Safari)
-        if (hasShare) {
-          try {
-            const file = new File([capturedBlob], fileName, { type: 'image/png' });
-            await navigator.share({
-              files: [file],
-              title: shareTitle,
-              text: shareText
-            });
-            return { ok: true, status: 'shared' };
-          } catch (shareErr) {
-            if (shareErr.name === 'AbortError') {
-              return { ok: false, status: 'aborted' };
-            }
-          }
-        }
-
-        // Fallback: Download already captured blob directly (e.g. Firefox default clipboard policy)
-        if (capturedBlob) {
-          downloadBlob(capturedBlob, fileName);
-          return { ok: true, status: 'downloaded' };
-        }
+  // Try Web Share if available (e.g. macOS Safari)
+  if (hasShare) {
+    try {
+      const file = new File([renderedBlob], fileName, { type: 'image/png' });
+      await navigator.share({
+        files: [file],
+        title: shareTitle,
+        text: shareText
+      });
+      return { ok: true, status: 'shared' };
+    } catch (shareErr) {
+      if (shareErr.name === 'AbortError') {
+        return { ok: false, status: 'aborted' };
       }
     }
   }
 
-  // STRATEGY 3: General Fallback (Render once, attempt share, otherwise download)
+  // Safe fallback: download the already rendered blob directly to user's device
   try {
-    const canvas = await renderElementToCanvas(element, options);
-    const blob = await canvasToBlob(canvas);
-
-    if (hasShare) {
-      try {
-        const file = new File([blob], fileName, { type: 'image/png' });
-        await navigator.share({
-          files: [file],
-          title: shareTitle,
-          text: shareText
-        });
-        return { ok: true, status: 'shared' };
-      } catch (shareErr) {
-        if (shareErr.name === 'AbortError') {
-          return { ok: false, status: 'aborted' };
-        }
-      }
-    }
-
-    downloadBlob(blob, fileName);
+    downloadBlob(renderedBlob, fileName);
     return { ok: true, status: 'downloaded' };
-  } catch (err) {
-    console.error('Snapshot capture failed:', err);
-    return { ok: false, status: 'error', error: err };
+  } catch (dlErr) {
+    console.error('Download fallback failed:', dlErr);
+    return { ok: false, status: 'error', error: dlErr };
   }
 }

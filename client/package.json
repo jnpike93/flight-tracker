@@ -13,7 +13,7 @@
     "@react-oauth/google": "^0.13.5",
     "canvas-confetti": "^1.9.4",
     "globe.gl": "^2.46.2",
-    "html2canvas": "^1.4.1",
+    "html2canvas-pro": "^2.5.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.56.0",
     "react": "^19.2.8",

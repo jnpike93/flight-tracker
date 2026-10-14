@@ -105,8 +105,12 @@ export default function TopStatsSnapshotModal({
         cardRef.current,
         `aerolog-top5-stats-${new Date().toISOString().slice(0, 10)}.png`
       );
+      setCopyStatus('downloaded');
+      setTimeout(() => setCopyStatus('idle'), 3000);
     } catch (err) {
       console.error('Download error:', err);
+      setCopyStatus('error');
+      setTimeout(() => setCopyStatus('idle'), 3000);
     } finally {
       setDownloading(false);
     }

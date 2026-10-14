@@ -77,8 +77,12 @@ export default function AeroLogWrappedModal({
         cardRef.current,
         `aerolog-wrapped-${selectedYear}.png`
       );
+      setCopyStatus('downloaded');
+      setTimeout(() => setCopyStatus('idle'), 3000);
     } catch (err) {
       console.error('Download error:', err);
+      setCopyStatus('error');
+      setTimeout(() => setCopyStatus('idle'), 3000);
     } finally {
       setDownloading(false);
     }
