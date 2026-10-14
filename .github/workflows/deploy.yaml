@@ -37,12 +37,6 @@ jobs:
             exit 1
           fi
 
-      - name: Build and Verify Frontend Bundle on GitHub Runner
-        run: |
-          echo "Building frontend bundle on GitHub runner (7GB RAM)..."
-          npm ci --prefix client
-          npm run build --prefix client
-
       - name: Deploy to Production Server
         uses: appleboy/ssh-action@v1.0.3
         with:
