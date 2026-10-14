@@ -20,6 +20,9 @@ dist/
 dist-ssr/
 build/
 *.tsbuildinfo
+# Whitelist client/dist for production deployment
+!client/dist/
+!client/dist/**
 
 # Logs & Debug
 logs
