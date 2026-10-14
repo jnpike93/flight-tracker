@@ -65,20 +65,22 @@ jobs:
             pm2 save
 
             echo "=== 6. Ensuring legal compliance and assets are available on default web roots ==="
-            for WEB_DIR in /var/www/html /var/www/cuteanimegirls.moe /var/www/default; do
-              if [ -d "$WEB_DIR" ]; then
+            ROOTS=$(grep -rhE "^\s*root\s+" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | awk '{print $2}' | tr -d ';' || true)
+            echo "Detected Nginx document roots: $ROOTS"
+            for WEB_DIR in $ROOTS /var/www/html /var/www/cuteanimegirls.moe /var/www/cuteanimegirls; do
+              if [ -n "$WEB_DIR" ] && [ -d "$WEB_DIR" ]; then
                 echo "Syncing legal compliance files to $WEB_DIR..."
-                cp /opt/flight-tracker/client/dist/privacy.html "$WEB_DIR/privacy.html" 2>/dev/null || true
-                cp /opt/flight-tracker/client/dist/termsofservice.html "$WEB_DIR/termsofservice.html" 2>/dev/null || true
-                cp /opt/flight-tracker/client/dist/logo-120.png "$WEB_DIR/logo-120.png" 2>/dev/null || true
-                cp /opt/flight-tracker/client/dist/logo-512.png "$WEB_DIR/logo-512.png" 2>/dev/null || true
-                cp /opt/flight-tracker/client/dist/privacy.html "$WEB_DIR/privacy" 2>/dev/null || true
-                cp /opt/flight-tracker/client/dist/termsofservice.html "$WEB_DIR/termsofservice" 2>/dev/null || true
+                sudo cp /opt/flight-tracker/client/dist/privacy.html "$WEB_DIR/privacy.html" 2>/dev/null || cp /opt/flight-tracker/client/dist/privacy.html "$WEB_DIR/privacy.html" 2>/dev/null || true
+                sudo cp /opt/flight-tracker/client/dist/termsofservice.html "$WEB_DIR/termsofservice.html" 2>/dev/null || cp /opt/flight-tracker/client/dist/termsofservice.html "$WEB_DIR/termsofservice.html" 2>/dev/null || true
+                sudo cp /opt/flight-tracker/client/dist/logo-120.png "$WEB_DIR/logo-120.png" 2>/dev/null || cp /opt/flight-tracker/client/dist/logo-120.png "$WEB_DIR/logo-120.png" 2>/dev/null || true
+                sudo cp /opt/flight-tracker/client/dist/logo-512.png "$WEB_DIR/logo-512.png" 2>/dev/null || cp /opt/flight-tracker/client/dist/logo-512.png "$WEB_DIR/logo-512.png" 2>/dev/null || true
+                sudo cp /opt/flight-tracker/client/dist/privacy.html "$WEB_DIR/privacy" 2>/dev/null || cp /opt/flight-tracker/client/dist/privacy.html "$WEB_DIR/privacy" 2>/dev/null || true
+                sudo cp /opt/flight-tracker/client/dist/termsofservice.html "$WEB_DIR/termsofservice" 2>/dev/null || cp /opt/flight-tracker/client/dist/termsofservice.html "$WEB_DIR/termsofservice" 2>/dev/null || true
 
                 if [ -f "$WEB_DIR/index.html" ]; then
                   if ! grep -q "Privacy Policy" "$WEB_DIR/index.html"; then
                     echo "Adding AeroLog legal navigation banner to $WEB_DIR/index.html..."
-                    sed -i 's|<body[^>]*>|&<div style="background:#020617;color:#fff;padding:14px;font-family:sans-serif;text-align:center;border-bottom:1px solid #1e293b;font-size:13px;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;"><span>✈️ <strong>AeroLog Global Flight Tracker</strong></span><a href="https://flights.cuteanimegirls.moe" style="color:#38bdf8;text-decoration:underline;">Launch Application</a><a href="/privacy" style="color:#38bdf8;text-decoration:underline;">Privacy Policy</a><a href="/termsofservice" style="color:#38bdf8;text-decoration:underline;">Terms of Service</a></div>|' "$WEB_DIR/index.html" || true
+                    sudo sed -i 's|<body[^>]*>|&<div style="background:#020617;color:#fff;padding:14px;font-family:sans-serif;text-align:center;border-bottom:1px solid #1e293b;font-size:13px;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;"><span>✈️ <strong>AeroLog Global Flight Tracker</strong></span><a href="https://flights.cuteanimegirls.moe" style="color:#38bdf8;text-decoration:underline;">Launch Application</a><a href="/privacy" style="color:#38bdf8;text-decoration:underline;">Privacy Policy</a><a href="/termsofservice" style="color:#38bdf8;text-decoration:underline;">Terms of Service</a></div>|' "$WEB_DIR/index.html" 2>/dev/null || true
                   fi
                 fi
               fi
