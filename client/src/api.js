@@ -302,4 +302,78 @@ export async function parseBoardingPass(rawText) {
   return data;
 }
 
+// ================= ADMIN CONSOLE API =================
+
+export async function fetchAdminUsers() {
+  const res = await fetch(`${API_BASE}/admin/users`, {
+    headers: authHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to fetch admin users');
+  }
+  return data;
+}
+
+export async function fetchAdminUserFlights(email) {
+  const res = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(email)}/flights`, {
+    headers: authHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to fetch user flights');
+  }
+  return data;
+}
+
+export async function addAdminUser(email, name, role = 'user') {
+  const res = await fetch(`${API_BASE}/admin/users`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ email, name, role })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to add user');
+  }
+  return data;
+}
+
+export async function updateAdminUserRole(email, role) {
+  const res = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(email)}/role`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ role })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to update user role');
+  }
+  return data;
+}
+
+export async function removeAdminUser(email) {
+  const res = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(email)}`, {
+    method: 'DELETE',
+    headers: authHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to remove user');
+  }
+  return data;
+}
+
+export async function deleteAdminUserFlights(email) {
+  const res = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(email)}/flights`, {
+    method: 'DELETE',
+    headers: authHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to purge user flights');
+  }
+  return data;
+}
+
 

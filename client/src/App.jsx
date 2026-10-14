@@ -16,7 +16,8 @@ import BoardingPassScanModal from './components/BoardingPassScanModal';
 import LoginScreen from './components/LoginScreen';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
-import { Globe, Map } from 'lucide-react';
+import AdminUsersPage from './components/AdminUsersPage';
+import { Globe, Map, ShieldAlert } from 'lucide-react';
 import {
   fetchFlights,
   fetchStats,
@@ -189,6 +190,44 @@ export default function App() {
 
   const clientId = authConfig?.googleClientId || 'temp-dev-client-id';
 
+  // Administrator Console View / Route
+  if (currentRoute === '/admin' || currentView === 'admin') {
+    if (!currentUser.isAdmin) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-slate-100">
+          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h2 className="text-lg font-bold text-white">Administrator Access Required</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              The user directory and system administration console is restricted to verified administrators.
+            </p>
+            <button
+              onClick={() => {
+                setCurrentView('dashboard');
+                navigateTo('/');
+              }}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition"
+            >
+              Return to Flight Tracker
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <AdminUsersPage
+        currentUser={currentUser}
+        onBack={() => {
+          setCurrentView('dashboard');
+          navigateTo('/');
+        }}
+      />
+    );
+  }
+
   // Logged in: Main Application
   return (
     <GoogleOAuthProvider clientId={clientId}>
@@ -197,6 +236,7 @@ export default function App() {
         <Navbar
           currentView={currentView}
           onSelectView={setCurrentView}
+          onNavigate={navigateTo}
           viewMode={viewMode}
           setViewMode={setViewMode}
           onOpenAddModal={() => setIsAddModalOpen(true)}

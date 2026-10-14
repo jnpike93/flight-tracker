@@ -21,24 +21,50 @@ function initAuthDb(db) {
       name TEXT,
       added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       added_by TEXT,
-      role TEXT DEFAULT 'user'
+      role TEXT DEFAULT 'user',
+      picture TEXT,
+      first_login DATETIME,
+      last_login DATETIME,
+      login_count INTEGER DEFAULT 0,
+      last_login_method TEXT DEFAULT 'google'
     );
   `);
 
-  // Ensure role column exists if upgrading an existing database
+  // Ensure upgrade columns exist if upgrading an existing database
   try {
     const columns = db.prepare("PRAGMA table_info(allowed_users)").all();
-    if (!columns.some(c => c.name === 'role')) {
+    const colNames = new Set(columns.map(c => c.name));
+
+    if (!colNames.has('role')) {
       db.exec("ALTER TABLE allowed_users ADD COLUMN role TEXT DEFAULT 'user'");
+    }
+    if (!colNames.has('picture')) {
+      db.exec("ALTER TABLE allowed_users ADD COLUMN picture TEXT");
+    }
+    if (!colNames.has('first_login')) {
+      db.exec("ALTER TABLE allowed_users ADD COLUMN first_login DATETIME");
+    }
+    if (!colNames.has('last_login')) {
+      db.exec("ALTER TABLE allowed_users ADD COLUMN last_login DATETIME");
+    }
+    if (!colNames.has('login_count')) {
+      db.exec("ALTER TABLE allowed_users ADD COLUMN login_count INTEGER DEFAULT 0");
+    }
+    if (!colNames.has('last_login_method')) {
+      db.exec("ALTER TABLE allowed_users ADD COLUMN last_login_method TEXT DEFAULT 'google'");
     }
   } catch (_) {}
 
   // Explicitly ensure Primary Admin (jakepike2011@gmail.com) is in database with admin role
   try {
     db.prepare(`
-      INSERT INTO allowed_users (email, name, added_by, role)
-      VALUES ('jakepike2011@gmail.com', 'Jake Pike', 'system', 'admin')
-      ON CONFLICT(email) DO UPDATE SET role = 'admin'
+      INSERT INTO allowed_users (email, name, added_by, role, first_login, last_login, login_count)
+      VALUES ('jakepike2011@gmail.com', 'Jake Pike', 'system', 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+      ON CONFLICT(email) DO UPDATE SET
+        role = 'admin',
+        login_count = CASE WHEN login_count IS NULL OR login_count = 0 THEN 1 ELSE login_count END,
+        first_login = COALESCE(first_login, CURRENT_TIMESTAMP),
+        last_login = COALESCE(last_login, CURRENT_TIMESTAMP)
     `).run();
   } catch (_) {}
 
@@ -55,6 +81,36 @@ function initAuthDb(db) {
 
   for (const email of envAllowed) {
     insert.run(email, email);
+  }
+}
+
+// Record an authenticated user session
+function recordUserLogin(db, { email, name, picture, method = 'google' }) {
+  if (!email) return;
+  const cleanEmail = email.trim().toLowerCase();
+  const isAdminUser = isAdmin(db, cleanEmail);
+
+  try {
+    const existing = db.prepare('SELECT email, first_login, login_count FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
+    if (existing) {
+      db.prepare(`
+        UPDATE allowed_users
+        SET name = COALESCE(?, name),
+            picture = COALESCE(?, picture),
+            last_login = CURRENT_TIMESTAMP,
+            first_login = COALESCE(first_login, CURRENT_TIMESTAMP),
+            login_count = COALESCE(login_count, 0) + 1,
+            last_login_method = ?
+        WHERE LOWER(email) = ?
+      `).run(name || null, picture || null, method, cleanEmail);
+    } else {
+      db.prepare(`
+        INSERT INTO allowed_users (email, name, picture, added_by, role, first_login, last_login, login_count, last_login_method)
+        VALUES (?, ?, ?, 'login', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?)
+      `).run(cleanEmail, name || cleanEmail.split('@')[0], picture || null, isAdminUser ? 'admin' : 'user', method);
+    }
+  } catch (err) {
+    console.error('Failed to record user login:', err.message);
   }
 }
 
@@ -234,6 +290,7 @@ module.exports = {
   generateSessionToken,
   verifySessionToken,
   requireAuth,
-  requireAdmin
+  requireAdmin,
+  recordUserLogin
 };
 

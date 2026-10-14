@@ -242,6 +242,14 @@ app.post('/api/auth/google', authRateLimiter, async (req, res) => {
       });
     }
 
+    // Record Authenticated Session
+    auth.recordUserLogin(db, {
+      email: googleUser.email,
+      name: googleUser.name,
+      picture: googleUser.picture,
+      method: 'google'
+    });
+
     // Generate Session Token
     const token = auth.generateSessionToken(googleUser, db);
     res.json({
@@ -288,6 +296,14 @@ app.post('/api/auth/dev-login', authRateLimiter, (req, res) => {
       message: `Access Denied: The account "${cleanEmail}" is not on the authorized user list.`
     });
   }
+
+  // Record Authenticated Session
+  auth.recordUserLogin(db, {
+    email: cleanEmail,
+    name: name || cleanEmail.split('@')[0],
+    picture: '',
+    method: 'dev'
+  });
 
   const user = {
     email: cleanEmail,
@@ -361,6 +377,305 @@ app.delete('/api/auth/allowed-users/:email', requireAuth, requireAdmin, (req, re
 
   db.prepare('DELETE FROM allowed_users WHERE LOWER(email) = ?').run(targetEmail);
   res.json({ success: true });
+});
+
+// ================= ADMIN CONSOLE / USER MANAGEMENT ENDPOINTS =================
+
+// Get All Users with Authentication details and Flight Data aggregations
+app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
+  try {
+    // 1. Fetch all records from allowed_users
+    const dbUsers = db.prepare(`
+      SELECT
+        email,
+        name,
+        picture,
+        role,
+        added_at,
+        added_by,
+        first_login,
+        last_login,
+        login_count,
+        last_login_method
+      FROM allowed_users
+    `).all();
+
+    // 2. Fetch distinct user_emails and aggregate flight statistics from flights table
+    const flightStatsByUser = db.prepare(`
+      SELECT
+        LOWER(user_email) as email,
+        COUNT(*) as flight_count,
+        COALESCE(SUM(distance_miles), 0) as total_distance_miles,
+        COALESCE(SUM(distance_km), 0) as total_distance_km,
+        MIN(date) as earliest_flight_date,
+        MAX(date) as latest_flight_date,
+        MAX(created_at) as last_flight_added_at
+      FROM flights
+      WHERE user_email IS NOT NULL AND TRIM(user_email) != ''
+      GROUP BY LOWER(user_email)
+    `).all();
+
+    const flightStatsMap = new Map();
+    for (const row of flightStatsByUser) {
+      // Calculate distinct airports for this user
+      const airportCount = db.prepare(`
+        SELECT COUNT(DISTINCT iata) as count FROM (
+          SELECT origin_iata as iata FROM flights WHERE LOWER(user_email) = ?
+          UNION
+          SELECT dest_iata as iata FROM flights WHERE LOWER(user_email) = ?
+        )
+      `).get(row.email, row.email)?.count || 0;
+
+      // Calculate distinct airlines for this user
+      const airlineCount = db.prepare(`
+        SELECT COUNT(DISTINCT airline) as count FROM flights WHERE LOWER(user_email) = ?
+      `).get(row.email)?.count || 0;
+
+      flightStatsMap.set(row.email, {
+        flightCount: row.flight_count,
+        totalDistanceMiles: row.total_distance_miles,
+        totalDistanceKm: row.total_distance_km,
+        earliestFlightDate: row.earliest_flight_date,
+        latestFlightDate: row.latest_flight_date,
+        lastFlightAddedAt: row.last_flight_added_at,
+        uniqueAirports: airportCount,
+        uniqueAirlines: airlineCount
+      });
+    }
+
+    // 3. Environment Allowed accounts
+    const envAllowed = (process.env.ALLOWED_EMAILS || '')
+      .split(',')
+      .map(e => e.trim().toLowerCase())
+      .filter(Boolean);
+
+    // 4. Combine all distinct users
+    const allEmails = new Set();
+    dbUsers.forEach(u => allEmails.add(u.email.toLowerCase()));
+    flightStatsByUser.forEach(f => allEmails.add(f.email.toLowerCase()));
+    envAllowed.forEach(e => allEmails.add(e.toLowerCase()));
+
+    const dbUserMap = new Map(dbUsers.map(u => [u.email.toLowerCase(), u]));
+
+    const users = Array.from(allEmails).map(email => {
+      const dbUser = dbUserMap.get(email);
+      const flightStats = flightStatsMap.get(email) || {
+        flightCount: 0,
+        totalDistanceMiles: 0,
+        totalDistanceKm: 0,
+        earliestFlightDate: null,
+        latestFlightDate: null,
+        lastFlightAddedAt: null,
+        uniqueAirports: 0,
+        uniqueAirlines: 0
+      };
+
+      const isPrimaryAdmin = email === 'jakepike2011@gmail.com';
+      const isSystemAdmin = auth.isAdmin(db, email);
+      const isAllowed = auth.isEmailAllowed(db, email);
+
+      const loginCount = dbUser?.login_count || 0;
+      const hasAuthenticated = Boolean(loginCount > 0 || dbUser?.last_login);
+      const hasData = flightStats.flightCount > 0;
+
+      return {
+        email,
+        name: dbUser?.name || email.split('@')[0],
+        picture: dbUser?.picture || '',
+        role: dbUser?.role || (isSystemAdmin ? 'admin' : 'user'),
+        isAdmin: isSystemAdmin,
+        isPrimaryAdmin,
+        isAllowed,
+        hasAuthenticated,
+        firstLogin: dbUser?.first_login || null,
+        lastLogin: dbUser?.last_login || null,
+        loginCount: loginCount,
+        lastLoginMethod: dbUser?.last_login_method || null,
+        addedAt: dbUser?.added_at || null,
+        addedBy: dbUser?.added_by || (envAllowed.includes(email) ? '.env' : (hasData ? 'flight_log' : 'allowlist')),
+        flightCount: flightStats.flightCount,
+        hasData,
+        totalDistanceMiles: flightStats.totalDistanceMiles,
+        totalDistanceKm: flightStats.totalDistanceKm,
+        uniqueAirports: flightStats.uniqueAirports,
+        uniqueAirlines: flightStats.uniqueAirlines,
+        earliestFlightDate: flightStats.earliestFlightDate,
+        latestFlightDate: flightStats.latestFlightDate,
+        lastFlightAddedAt: flightStats.lastFlightAddedAt
+      };
+    });
+
+    // Default Sort: Primary Admin first, then authenticated with data, then flights desc
+    users.sort((a, b) => {
+      if (a.isPrimaryAdmin) return -1;
+      if (b.isPrimaryAdmin) return 1;
+      if ((a.hasAuthenticated && a.hasData) && !(b.hasAuthenticated && b.hasData)) return -1;
+      if (!(a.hasAuthenticated && a.hasData) && (b.hasAuthenticated && b.hasData)) return 1;
+      if (a.hasAuthenticated && !b.hasAuthenticated) return -1;
+      if (!a.hasAuthenticated && b.hasAuthenticated) return 1;
+      return (b.flightCount || 0) - (a.flightCount || 0);
+    });
+
+    // Global system totals
+    const totalFlightsSystem = db.prepare('SELECT COUNT(*) as count FROM flights').get().count;
+    const totalMilesSystem = db.prepare('SELECT COALESCE(SUM(distance_miles), 0) as miles FROM flights').get().miles;
+    const totalAirportsSystem = db.prepare(`
+      SELECT COUNT(DISTINCT iata) as count FROM (
+        SELECT origin_iata as iata FROM flights
+        UNION
+        SELECT dest_iata as iata FROM flights
+      )
+    `).get().count;
+
+    const summary = {
+      totalUsers: users.length,
+      totalAuthenticated: users.filter(u => u.hasAuthenticated).length,
+      totalWithData: users.filter(u => u.hasData).length,
+      totalAuthenticatedWithData: users.filter(u => u.hasAuthenticated && u.hasData).length,
+      totalAdmins: users.filter(u => u.isAdmin).length,
+      totalFlightsSystem,
+      totalMilesSystem,
+      totalAirportsSystem
+    };
+
+    res.json({ summary, users });
+  } catch (err) {
+    console.error('Admin users fetch error:', err);
+    res.status(500).json({ error: 'Failed to retrieve admin user list: ' + err.message });
+  }
+});
+
+// Inspect a specific user's flights and data
+app.get('/api/admin/users/:email/flights', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const targetEmail = req.params.email.trim().toLowerCase();
+    const flights = db.prepare(`
+      SELECT * FROM flights
+      WHERE LOWER(user_email) = ?
+      ORDER BY date DESC, id DESC
+    `).all(targetEmail);
+
+    const dbUser = db.prepare('SELECT * FROM allowed_users WHERE LOWER(email) = ?').get(targetEmail);
+
+    const totalMiles = flights.reduce((sum, f) => sum + (f.distance_miles || 0), 0);
+    const totalKm = flights.reduce((sum, f) => sum + (f.distance_km || 0), 0);
+
+    // Top airports for this user
+    const topAirports = db.prepare(`
+      SELECT iata, name, city, country, COUNT(*) as visits FROM (
+        SELECT origin_iata as iata, origin_name as name, origin_city as city, origin_country as country FROM flights WHERE LOWER(user_email) = ?
+        UNION ALL
+        SELECT dest_iata as iata, dest_name as name, dest_city as city, dest_country as country FROM flights WHERE LOWER(user_email) = ?
+      )
+      GROUP BY iata
+      ORDER BY visits DESC
+      LIMIT 10
+    `).all(targetEmail, targetEmail);
+
+    // Top airlines for this user
+    const topAirlines = db.prepare(`
+      SELECT airline, airline_code, COUNT(*) as count, SUM(distance_miles) as miles
+      FROM flights
+      WHERE LOWER(user_email) = ?
+      GROUP BY airline
+      ORDER BY count DESC
+      LIMIT 10
+    `).all(targetEmail);
+
+    res.json({
+      email: targetEmail,
+      user: dbUser || { email: targetEmail },
+      flights,
+      stats: {
+        totalFlights: flights.length,
+        totalMiles,
+        totalKm,
+        topAirports,
+        topAirlines
+      }
+    });
+  } catch (err) {
+    console.error('Admin user flights fetch error:', err);
+    res.status(500).json({ error: 'Failed to retrieve user flights: ' + err.message });
+  }
+});
+
+// Add or invite user directly from Admin Console (Admin only)
+app.post('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
+  const { email, name, role = 'user' } = req.body;
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid email address is required' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanRole = role === 'admin' ? 'admin' : 'user';
+
+  try {
+    db.prepare(`
+      INSERT INTO allowed_users (email, name, added_by, role)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET
+        name = COALESCE(excluded.name, allowed_users.name),
+        role = excluded.role
+    `).run(cleanEmail, name || cleanEmail.split('@')[0], req.user.email, cleanRole);
+
+    res.status(201).json({ success: true, email: cleanEmail, role: cleanRole });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add user to allowlist: ' + err.message });
+  }
+});
+
+// Update user role (Admin only)
+app.patch('/api/admin/users/:email/role', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const targetEmail = req.params.email.trim().toLowerCase();
+    const { role } = req.body;
+
+    if (!['admin', 'user'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be "admin" or "user".' });
+    }
+
+    if (targetEmail === 'jakepike2011@gmail.com' && role !== 'admin') {
+      return res.status(403).json({ error: 'The primary system administrator role cannot be altered.' });
+    }
+
+    // Ensure user exists in allowed_users
+    db.prepare(`
+      INSERT INTO allowed_users (email, name, added_by, role)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET role = excluded.role
+    `).run(targetEmail, targetEmail.split('@')[0], req.user.email, role);
+
+    res.json({ success: true, email: targetEmail, role });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update user role: ' + err.message });
+  }
+});
+
+// Delete user / revoke access from allowlist (Admin only)
+app.delete('/api/admin/users/:email', requireAuth, requireAdmin, (req, res) => {
+  const targetEmail = req.params.email.trim().toLowerCase();
+  if (targetEmail === req.user.email.toLowerCase()) {
+    return res.status(400).json({ error: 'You cannot revoke your own authorized account' });
+  }
+
+  if (targetEmail === 'jakepike2011@gmail.com') {
+    return res.status(403).json({ error: 'The primary system administrator cannot be removed.' });
+  }
+
+  db.prepare('DELETE FROM allowed_users WHERE LOWER(email) = ?').run(targetEmail);
+  res.json({ success: true });
+});
+
+// Purge flights for a specific user (GDPR / Admin cleanup)
+app.delete('/api/admin/users/:email/flights', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const targetEmail = req.params.email.trim().toLowerCase();
+    const result = db.prepare('DELETE FROM flights WHERE LOWER(user_email) = ?').run(targetEmail);
+    res.json({ success: true, deletedFlights: result.changes });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete user flight data: ' + err.message });
+  }
 });
 
 // ================= CALENDAR HISTORIC FLIGHTS SYNC =================

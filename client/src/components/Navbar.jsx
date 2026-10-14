@@ -35,7 +35,8 @@ export default function Navbar({
   onDataChanged,
   currentUser,
   unlockedBadgesCount = 0,
-  totalTripsCount = 0
+  totalTripsCount = 0,
+  onNavigate
 }) {
   const fileInputRef = useRef(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -239,6 +240,25 @@ export default function Navbar({
               </div>
             )}
           </div>
+
+          {/* Admin Console Quick Access (Admin only) */}
+          {currentUser?.isAdmin && (
+            <button
+              onClick={() => {
+                if (onNavigate) onNavigate('/admin');
+                else if (onSelectView) onSelectView('admin');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                currentView === 'admin'
+                  ? 'bg-cyan-500 text-slate-950 font-bold border-cyan-400 shadow-sm shadow-cyan-500/20'
+                  : 'bg-slate-900/90 text-cyan-400 border-cyan-500/30 hover:border-cyan-400 hover:text-cyan-300'
+              }`}
+              title="Manage authenticated users and application data"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Admin Console</span>
+            </button>
+          )}
         </div>
 
         {/* Right Actions & User Profile */}
@@ -358,6 +378,19 @@ export default function Navbar({
                   </div>
 
                   <div className="py-1">
+                    {currentUser?.isAdmin && (
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          if (onNavigate) onNavigate('/admin');
+                          else if (onSelectView) onSelectView('admin');
+                        }}
+                        className="w-full px-4 py-1.5 text-left text-xs text-cyan-300 hover:bg-slate-800 flex items-center gap-2 font-medium"
+                      >
+                        <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Admin Console: Users & Data</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
@@ -366,7 +399,7 @@ export default function Navbar({
                       className="w-full px-4 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2"
                     >
                       <Shield className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Security & Access Control</span>
+                      <span>Security & Allowlist</span>
                     </button>
                     <button
                       onClick={() => {
