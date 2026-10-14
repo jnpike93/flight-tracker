@@ -20,20 +20,53 @@ app.use((req, res, next) => {
   next();
 });
 
-// 2. Constrained CORS
-const allowedOrigins = process.env.ALLOWED_ORIGINS
+// 2. Constrained CORS & Production Domain Whitelist
+const defaultAllowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'https://flights.cuteanimegirls.moe',
+  'http://flights.cuteanimegirls.moe',
+  'https://cuteanimegirls.moe',
+  'http://cuteanimegirls.moe'
+];
+const envAllowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim().toLowerCase())
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
+  : [];
+const allowedOrigins = [...new Set([...defaultAllowedOrigins, ...envAllowedOrigins])];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin.toLowerCase()) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
-  credentials: true
+const isAllowedOrigin = (origin, host) => {
+  if (!origin) return true;
+  const lower = origin.toLowerCase();
+
+  // Whitelisted origins
+  if (allowedOrigins.includes(lower)) return true;
+
+  // Local development
+  if (lower.startsWith('http://localhost:') || lower.startsWith('http://127.0.0.1:')) return true;
+
+  // Domain matches
+  try {
+    const originUrl = new URL(origin);
+    const originHost = originUrl.hostname.toLowerCase();
+
+    // Match the request Host header (same host / reverse proxy)
+    if (host && originHost === host.split(':')[0].toLowerCase()) return true;
+
+    // cuteanimegirls.moe root and subdomains
+    if (originHost === 'cuteanimegirls.moe' || originHost.endsWith('.cuteanimegirls.moe')) return true;
+  } catch {}
+
+  return false;
+};
+
+app.use(cors((req, callback) => {
+  const allowed = isAllowedOrigin(req.headers.origin, req.headers.host);
+  callback(null, {
+    origin: allowed,
+    credentials: true
+  });
 }));
 
 app.use(express.json({ limit: '2mb' }));
@@ -1480,9 +1513,17 @@ app.post('/api/reset-samples', requireAuth, (req, res) => {
 const clientDist = path.join(__dirname, '../client/dist');
 const fs = require('fs');
 if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
+  app.use(express.static(clientDist, {
+    maxAge: '1h',
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    }
+  }));
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
