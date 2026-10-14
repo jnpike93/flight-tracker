@@ -97,11 +97,11 @@ export default function FlightMap2D({ flights = [], selectedFlight = null, onSel
   const [mapTheme, setMapTheme] = useState('dark'); // 'dark' | 'satellite' | 'voyager'
   const [showAirportLabels, setShowAirportLabels] = useState(true);
 
-  // Basemap tile definitions
+  // Basemap tile definitions - 100% free, high-performance, no API keys required
   const tileSources = {
-    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    dark: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
     satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    voyager: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+    streets: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
   };
 
   // Extract unique airports for pin markers
@@ -158,8 +158,8 @@ export default function FlightMap2D({ flights = [], selectedFlight = null, onSel
 
     // Basemap Layer
     const tileLayer = L.tileLayer(tileSources[mapTheme], {
-      subdomains: 'abcd',
-      maxZoom: 19
+      maxZoom: 18,
+      attribution: '&copy; Esri & OpenStreetMap contributors'
     }).addTo(map);
 
     tileLayerRef.current = tileLayer;
@@ -293,7 +293,6 @@ export default function FlightMap2D({ flights = [], selectedFlight = null, onSel
           display: flex;
           align-items: center;
           justify-content: center;
-          position: relative;
           cursor: pointer;
         ">
           <div style="
@@ -304,36 +303,28 @@ export default function FlightMap2D({ flights = [], selectedFlight = null, onSel
             border: 2px solid ${isConnectedToSelected ? '#ffffff' : '#0f172a'};
             box-shadow: 0 0 8px ${isConnectedToSelected ? 'rgba(245, 158, 11, 0.9)' : 'rgba(56, 189, 248, 0.7)'};
           "></div>
-          ${
-            showAirportLabels
-              ? `<span style="
-                  position: absolute;
-                  top: -14px;
-                  left: 8px;
-                  font-family: monospace;
-                  font-size: 9px;
-                  font-weight: 800;
-                  color: ${isConnectedToSelected ? '#fef08a' : '#cbd5e1'};
-                  background-color: rgba(15, 23, 42, 0.75);
-                  padding: 1px 3px;
-                  border-radius: 4px;
-                  white-space: nowrap;
-                  border: 1px solid rgba(51, 65, 85, 0.4);
-                  pointer-events: none;
-                ">${safeIata}</span>`
-              : ''
-          }
         </div>
       `;
 
       const customIcon = L.divIcon({
         html: markerHtml,
         className: 'custom-airport-pin',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
       });
 
       const marker = L.marker([apt.lat, apt.lon], { icon: customIcon });
+
+      if (showAirportLabels) {
+        marker.bindTooltip(safeIata, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -6],
+          className: isConnectedToSelected
+            ? 'aero-airport-tooltip-selected'
+            : 'aero-airport-tooltip'
+        });
+      }
 
       const popupContent = `
         <div style="font-family: ui-sans-serif, system-ui; font-size: 11px; padding: 2px;">
@@ -459,7 +450,7 @@ export default function FlightMap2D({ flights = [], selectedFlight = null, onSel
         {/* Theme Switcher: Dark / Satellite / Street */}
         <button
           onClick={() => {
-            const nextTheme = mapTheme === 'dark' ? 'satellite' : mapTheme === 'satellite' ? 'voyager' : 'dark';
+            const nextTheme = mapTheme === 'dark' ? 'satellite' : mapTheme === 'satellite' ? 'streets' : 'dark';
             setMapTheme(nextTheme);
           }}
           title={`Switch Map Texture (Current: ${mapTheme})`}

@@ -180,7 +180,17 @@ export default function GlobeView({ flights = [], selectedFlight = null, onSelec
       .ringColor(() => (t) => `rgba(56, 189, 248, ${Math.sqrt(1 - t)})`)
       .ringMaxRadius((d) => Math.min(2.5, Math.max(0.8, d.count * 0.3)))
       .ringPropagationSpeed((d) => Math.min(2.0, Math.max(0.6, d.count * 0.2)))
-      .ringRepeatPeriod(1800);
+      .ringRepeatPeriod(1800)
+      // 3D Airport Labels (IATA codes)
+      .labelsData(showLabels ? airportsData : [])
+      .labelLat('lat')
+      .labelLng('lon')
+      .labelText('iata')
+      .labelSize((d) => (d.count >= 2 ? 1.3 : 1.0))
+      .labelDotRadius(0.3)
+      .labelColor(() => '#ffffff')
+      .labelResolution(2)
+      .labelAltitude(0.015);
 
     globe.controls().autoRotate = autoRotate;
     globe.controls().autoRotateSpeed = 0.6;
@@ -253,6 +263,13 @@ export default function GlobeView({ flights = [], selectedFlight = null, onSelec
       );
     }
   }, [airportsData]);
+
+  // Update 3D airport labels visibility and data
+  useEffect(() => {
+    if (globeInstanceRef.current) {
+      globeInstanceRef.current.labelsData(showLabels ? airportsData : []);
+    }
+  }, [showLabels, airportsData]);
 
   // Auto-focus on selected flight
   useEffect(() => {

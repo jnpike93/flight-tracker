@@ -31,3 +31,50 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 1);
 }
+
+/* Leaflet custom tooltips & popups */
+.aero-airport-tooltip {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(56, 189, 248, 0.5) !important;
+  color: #38bdf8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  padding: 1px 4px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7) !important;
+}
+.aero-airport-tooltip::before {
+  border-top-color: rgba(56, 189, 248, 0.5) !important;
+}
+
+.aero-airport-tooltip-selected {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(245, 158, 11, 0.8) !important;
+  color: #fbbf24 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.6) !important;
+}
+.aero-airport-tooltip-selected::before {
+  border-top-color: rgba(245, 158, 11, 0.8) !important;
+}
+
+.aero-leaflet-popup .leaflet-popup-content-wrapper {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7) !important;
+  color: #f1f5f9 !important;
+}
+.aero-leaflet-popup .leaflet-popup-tip {
+  background: rgba(15, 23, 42, 0.95) !important;
+}
+.custom-airport-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
