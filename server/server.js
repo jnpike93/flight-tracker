@@ -14,7 +14,7 @@ app.set('trust proxy', 1);
 // Disable X-Powered-By header to prevent framework fingerprinting
 app.disable('x-powered-by');
 
-// 1. HTTP Security Headers
+// 1. HTTP Security Headers (OWASP A03 & A05 Compliant)
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -22,6 +22,18 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; " +
+    "font-src 'self' data: https://fonts.gstatic.com; " +
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://unpkg.com https://*.unpkg.com https://lh3.googleusercontent.com; " +
+    "connect-src 'self' https://accounts.google.com https://www.googleapis.com; " +
+    "frame-src 'self' https://accounts.google.com; " +
+    "object-src 'none'; " +
+    "base-uri 'self';"
+  );
   next();
 });
 
@@ -76,7 +88,13 @@ app.use(cors((req, callback) => {
 
 app.use(express.json({ limit: '2mb' }));
 
-// 3. Sensitive Endpoint Rate Limiter with automatic expired entry pruning
+// OWASP A09: Structured Security Audit Logging
+function logSecurityEvent(type, details = {}) {
+  const timestamp = new Date().toISOString();
+  console.log(`[SECURITY_AUDIT] ${timestamp} [${type}] ${JSON.stringify(details)}`);
+}
+
+// 3. Sensitive Endpoint Rate Limiter with automatic expired entry pruning (OWASP A04)
 const rateLimitMap = new Map();
 setInterval(() => {
   const now = Date.now();
@@ -102,6 +120,7 @@ function createRateLimiter(windowMs = 60 * 1000, maxRequests = 20, message = 'To
     rateLimitMap.set(ip, record);
 
     if (record.count > maxRequests) {
+      logSecurityEvent('RATE_LIMIT_EXCEEDED', { ip, path: req.path, method: req.method });
       return res.status(429).json({ error: 'RATE_LIMITED', message });
     }
     next();
@@ -110,6 +129,8 @@ function createRateLimiter(windowMs = 60 * 1000, maxRequests = 20, message = 'To
 
 const authRateLimiter = createRateLimiter(60 * 1000, 15, 'Too many authentication attempts. Please wait a minute and try again.');
 const calendarRateLimiter = createRateLimiter(60 * 1000, 15, 'Too many calendar scans requested. Please wait a minute and try again.');
+const apiWriteRateLimiter = createRateLimiter(60 * 1000, 60, 'Too many write requests. Please wait a minute and try again.');
+const lookupRateLimiter = createRateLimiter(60 * 1000, 30, 'Too many flight lookup requests. Please wait a minute and try again.');
 
 const dbPath = path.join(__dirname, 'flight_tracker.db');
 const db = new Database(dbPath);
@@ -249,6 +270,7 @@ app.post('/api/auth/google', authRateLimiter, async (req, res) => {
 
     // Check approval status
     if (userStatus === 'pending') {
+      logSecurityEvent('AUTH_REGISTRATION_PENDING', { email: googleUser.email, ip: req.ip });
       return res.status(200).json({
         status: 'PENDING_APPROVAL',
         message: 'Your login request has been submitted to the administrator for manual approval.',
@@ -261,6 +283,7 @@ app.post('/api/auth/google', authRateLimiter, async (req, res) => {
     }
 
     if (userStatus === 'rejected') {
+      logSecurityEvent('AUTH_LOGIN_REJECTED', { email: googleUser.email, ip: req.ip });
       return res.status(403).json({
         status: 'REJECTED',
         error: 'ACCESS_REJECTED',
@@ -274,6 +297,8 @@ app.post('/api/auth/google', authRateLimiter, async (req, res) => {
     // User is Approved: Issue Session Token
     const isUserAdmin = auth.isAdmin(db, googleUser.email);
     const token = auth.generateSessionToken({ ...googleUser, isAdmin: isUserAdmin }, db);
+    logSecurityEvent('AUTH_LOGIN_SUCCESS', { email: googleUser.email, isAdmin: isUserAdmin, ip: req.ip });
+
     res.json({
       status: 'APPROVED',
       token,
@@ -285,6 +310,7 @@ app.post('/api/auth/google', authRateLimiter, async (req, res) => {
       }
     });
   } catch (err) {
+    logSecurityEvent('AUTH_LOGIN_FAILED', { error: err.message, ip: req.ip });
     console.error('Google auth error:', err.message);
     res.status(401).json({ error: 'AUTH_FAILED', message: 'Failed to verify Google sign-in: ' + err.message });
   }
@@ -320,6 +346,7 @@ app.post('/api/auth/dev-login', authRateLimiter, (req, res) => {
   });
 
   if (userStatus === 'pending') {
+    logSecurityEvent('AUTH_REGISTRATION_PENDING', { email: cleanEmail, method: 'dev', ip: req.ip });
     return res.status(200).json({
       status: 'PENDING_APPROVAL',
       message: 'Your login request has been recorded and is awaiting manual administrator approval.',
@@ -332,6 +359,7 @@ app.post('/api/auth/dev-login', authRateLimiter, (req, res) => {
   }
 
   if (userStatus === 'rejected') {
+    logSecurityEvent('AUTH_LOGIN_REJECTED', { email: cleanEmail, method: 'dev', ip: req.ip });
     return res.status(403).json({
       status: 'REJECTED',
       error: 'ACCESS_REJECTED',
@@ -351,6 +379,7 @@ app.post('/api/auth/dev-login', authRateLimiter, (req, res) => {
   };
 
   const token = auth.generateSessionToken(user, db);
+  logSecurityEvent('AUTH_LOGIN_SUCCESS', { email: cleanEmail, isAdmin: isUserAdmin, method: 'dev', ip: req.ip });
   res.json({ status: 'APPROVED', token, user });
 });
 
@@ -395,6 +424,7 @@ app.post('/api/auth/allowed-users', requireAuth, requireAdmin, (req, res) => {
       ON CONFLICT(email) DO UPDATE SET name = excluded.name
     `).run(cleanEmail, name || cleanEmail.split('@')[0], req.user.email);
 
+    logSecurityEvent('ADMIN_ALLOWED_USER_ADDED', { admin: req.user.email, targetEmail: cleanEmail, ip: req.ip });
     res.status(201).json({ success: true, email: cleanEmail });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add user. Please verify user details.' });
@@ -414,6 +444,7 @@ app.delete('/api/auth/allowed-users/:email', requireAuth, requireAdmin, (req, re
   }
 
   db.prepare('DELETE FROM allowed_users WHERE LOWER(email) = ?').run(targetEmail);
+  logSecurityEvent('ADMIN_ALLOWED_USER_REMOVED', { admin: req.user.email, targetEmail, ip: req.ip });
   res.json({ success: true });
 });
 
@@ -667,6 +698,7 @@ app.post('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
         status = excluded.status
     `).run(cleanEmail, name || cleanEmail.split('@')[0], req.user.email, cleanRole, cleanStatus);
 
+    logSecurityEvent('ADMIN_USER_CREATED', { admin: req.user.email, targetEmail: cleanEmail, role: cleanRole, status: cleanStatus, ip: req.ip });
     res.status(201).json({ success: true, email: cleanEmail, role: cleanRole, status: cleanStatus });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add user to allowlist: ' + err.message });
@@ -680,6 +712,7 @@ app.patch('/api/admin/users/:email/status', requireAuth, requireAdmin, (req, res
     const { status } = req.body;
 
     const result = auth.updateUserStatus(db, targetEmail, status);
+    logSecurityEvent('ADMIN_USER_STATUS_UPDATED', { admin: req.user.email, targetEmail, newStatus: status, ip: req.ip });
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(400).json({ error: err.message || 'Failed to update user approval status' });
@@ -707,6 +740,7 @@ app.patch('/api/admin/users/:email/role', requireAuth, requireAdmin, (req, res) 
       ON CONFLICT(email) DO UPDATE SET role = excluded.role
     `).run(targetEmail, targetEmail.split('@')[0], req.user.email, role);
 
+    logSecurityEvent('ADMIN_USER_ROLE_UPDATED', { admin: req.user.email, targetEmail, newRole: role, ip: req.ip });
     res.json({ success: true, email: targetEmail, role });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update user role: ' + err.message });
@@ -725,6 +759,7 @@ app.delete('/api/admin/users/:email', requireAuth, requireAdmin, (req, res) => {
   }
 
   db.prepare('DELETE FROM allowed_users WHERE LOWER(email) = ?').run(targetEmail);
+  logSecurityEvent('ADMIN_USER_DELETED', { admin: req.user.email, targetEmail, ip: req.ip });
   res.json({ success: true });
 });
 
@@ -733,6 +768,7 @@ app.delete('/api/admin/users/:email/flights', requireAuth, requireAdmin, (req, r
   try {
     const targetEmail = req.params.email.trim().toLowerCase();
     const result = db.prepare('DELETE FROM flights WHERE LOWER(user_email) = ?').run(targetEmail);
+    logSecurityEvent('ADMIN_USER_FLIGHTS_PURGED', { admin: req.user.email, targetEmail, count: result.changes, ip: req.ip });
     res.json({ success: true, deletedFlights: result.changes });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete user flight data: ' + err.message });
@@ -965,7 +1001,7 @@ app.post('/api/calendar/scan-ics', requireAuth, calendarRateLimiter, (req, res) 
 });
 
 // Bulk Confirm & Import Selected Flights from Calendar
-app.post('/api/calendar/confirm-import', requireAuth, (req, res) => {
+app.post('/api/calendar/confirm-import', requireAuth, apiWriteRateLimiter, (req, res) => {
   try {
     const { flights } = req.body;
     if (!Array.isArray(flights) || flights.length === 0) {
@@ -1113,7 +1149,7 @@ app.get('/api/airlines/search', (req, res) => {
 });
 
 // 4. Flight number auto-lookup
-app.get('/api/flights/lookup/:flightNumber', (req, res) => {
+app.get('/api/flights/lookup/:flightNumber', lookupRateLimiter, (req, res) => {
   const raw = req.params.flightNumber.trim();
   // Regex to extract 2-letter airline code and digits (e.g., "UA 895", "BA178", "DL 482", "B6 123")
   const match = raw.match(/^([A-Za-z0-9]{2})\s*([0-9]+)?/);
@@ -1179,7 +1215,7 @@ app.get('/api/flights', requireAuth, (req, res) => {
 });
 
 // 6. Add new flight for current user
-app.post('/api/flights', requireAuth, (req, res) => {
+app.post('/api/flights', requireAuth, apiWriteRateLimiter, (req, res) => {
   try {
     const userEmail = req.user.email.toLowerCase();
     const {
@@ -1288,7 +1324,7 @@ app.post('/api/flights', requireAuth, (req, res) => {
 });
 
 // 7. Update flight
-app.put('/api/flights/:id', requireAuth, (req, res) => {
+app.put('/api/flights/:id', requireAuth, apiWriteRateLimiter, (req, res) => {
   try {
     const id = req.params.id;
     const {
@@ -1386,7 +1422,7 @@ app.put('/api/flights/:id', requireAuth, (req, res) => {
 });
 
 // 8. Delete flight (only owned by user)
-app.delete('/api/flights/:id', requireAuth, (req, res) => {
+app.delete('/api/flights/:id', requireAuth, apiWriteRateLimiter, (req, res) => {
   const userEmail = req.user.email.toLowerCase();
   const result = db.prepare('DELETE FROM flights WHERE id = ? AND user_email = ?').run(req.params.id, userEmail);
   if (result.changes === 0) return res.status(404).json({ error: 'Flight not found or access denied' });
@@ -1394,7 +1430,7 @@ app.delete('/api/flights/:id', requireAuth, (req, res) => {
 });
 
 // 9. Clear all flights (only for current user)
-app.delete('/api/flights', requireAuth, (req, res) => {
+app.delete('/api/flights', requireAuth, apiWriteRateLimiter, (req, res) => {
   const userEmail = req.user.email.toLowerCase();
   db.prepare('DELETE FROM flights WHERE user_email = ?').run(userEmail);
   res.json({ success: true, message: 'All your logged flights cleared' });
@@ -1768,7 +1804,7 @@ app.get('/api/export', requireAuth, (req, res) => {
 });
 
 // 12. Import flights from JSON (current user only)
-app.post('/api/import', requireAuth, (req, res) => {
+app.post('/api/import', requireAuth, apiWriteRateLimiter, (req, res) => {
   const flights = req.body;
   if (!Array.isArray(flights)) {
     return res.status(400).json({ error: 'Payload must be an array of flights' });
@@ -1836,7 +1872,7 @@ app.post('/api/import', requireAuth, (req, res) => {
 });
 
 // 13. Reset samples for current user
-app.post('/api/reset-samples', requireAuth, (req, res) => {
+app.post('/api/reset-samples', requireAuth, apiWriteRateLimiter, (req, res) => {
   const userEmail = req.user.email.toLowerCase();
   db.prepare('DELETE FROM flights WHERE user_email = ?').run(userEmail);
 
@@ -1950,8 +1986,9 @@ app.use('/api', (req, res) => {
   res.status(404).json({ error: 'NOT_FOUND', message: 'API route not found' });
 });
 
-// Centralized Error Handling Middleware
+// Centralized Error Handling Middleware (OWASP A05)
 app.use((err, req, res, next) => {
+  logSecurityEvent('UNHANDLED_ERROR', { error: err.message, path: req.path, method: req.method, ip: req.ip });
   console.error('Unhandled Server Error:', err.message);
   if (res.headersSent) {
     return next(err);
