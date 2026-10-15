@@ -104,6 +104,7 @@ function createRateLimiter(windowMs = 60 * 1000, maxRequests = 20, message = 'To
 }
 
 const authRateLimiter = createRateLimiter(60 * 1000, 15, 'Too many authentication attempts. Please wait a minute and try again.');
+const calendarRateLimiter = createRateLimiter(60 * 1000, 15, 'Too many calendar scans requested. Please wait a minute and try again.');
 
 const dbPath = path.join(__dirname, 'flight_tracker.db');
 const db = new Database(dbPath);
@@ -358,8 +359,8 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   });
 });
 
-// Get Authorized Users List
-app.get('/api/auth/allowed-users', requireAuth, (req, res) => {
+// Get Authorized Users List (Admin only)
+app.get('/api/auth/allowed-users', requireAuth, requireAdmin, (req, res) => {
   const dbUsers = db.prepare('SELECT email, name, added_at, added_by FROM allowed_users ORDER BY added_at ASC').all();
   const envUsers = (process.env.ALLOWED_EMAILS || '')
     .split(',')
@@ -738,7 +739,7 @@ const calendarParser = require('./calendarParser');
 const flightIntelligence = require('./flightIntelligence');
 
 // Scan Google Calendar via OAuth Access Token
-app.post('/api/calendar/scan-google', requireAuth, async (req, res) => {
+app.post('/api/calendar/scan-google', requireAuth, calendarRateLimiter, async (req, res) => {
   try {
     const { accessToken, timeMin, timeMax, query } = req.body;
     if (!accessToken) {
@@ -929,7 +930,7 @@ app.post('/api/calendar/scan-google', requireAuth, async (req, res) => {
 });
 
 // Scan .ics Calendar File
-app.post('/api/calendar/scan-ics', requireAuth, (req, res) => {
+app.post('/api/calendar/scan-ics', requireAuth, calendarRateLimiter, (req, res) => {
   try {
     const { icsContent } = req.body;
     if (!icsContent || typeof icsContent !== 'string') {

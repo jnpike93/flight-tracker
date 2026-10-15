@@ -261,14 +261,14 @@ function generateSessionToken(user, db) {
       role: isUserAdmin ? 'admin' : 'user'
     },
     JWT_SECRET,
-    { expiresIn: '30d' }
+    { expiresIn: '30d', algorithm: 'HS256' }
   );
 }
 
 // Verify application JWT
 function verifySessionToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
   } catch (err) {
     return null;
   }
