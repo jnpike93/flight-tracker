@@ -40,3 +40,11 @@ Thumbs.db
 *.swp
 *.swo
 
+# Generated documents, audits & PDFs
+*.pdf
+SECURITY_AUDIT.md
+*security_audit*
+*pen_test*
+
+
+

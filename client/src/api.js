@@ -169,7 +169,9 @@ export async function searchAirports(q) {
 }
 
 export async function lookupFlightNumber(flightNumber) {
-  const res = await fetch(`${API_BASE}/flights/lookup/${encodeURIComponent(flightNumber)}`);
+  const res = await fetch(`${API_BASE}/flights/lookup/${encodeURIComponent(flightNumber)}`, {
+    headers: authHeaders()
+  });
   if (!res.ok) throw new Error('Failed to lookup flight number');
   return res.json();
 }

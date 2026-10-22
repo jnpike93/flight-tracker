@@ -248,8 +248,8 @@ export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) 
                     </p>
                   </div>
                 </GoogleOAuthProvider>
-              ) : (
-                /* Fallback Sign-In */
+              ) : authConfig?.devLoginEnabled ? (
+                /* Development Fallback Sign-In (Only active when explicitly enabled on server) */
                 <form onSubmit={handleDevSubmit} className="space-y-3">
                   <div>
                     <input
@@ -275,9 +275,17 @@ export default function LoginScreen({ authConfig, onLoginSuccess, onNavigate }) 
                     disabled={loading}
                     className="w-full py-2 px-3 text-xs font-bold text-slate-950 bg-cyan-500 hover:bg-cyan-400 rounded-xl transition disabled:opacity-50"
                   >
-                    {loading ? 'Signing in...' : 'Sign In'}
+                    {loading ? 'Signing in...' : 'Sign In (Dev)'}
                   </button>
                 </form>
+              ) : (
+                /* Neither Google nor Dev Login active */
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center space-y-2">
+                  <p className="text-xs text-amber-300 font-semibold">Sign-In Unavailable</p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Google OAuth is not configured on this server, and development direct sign-in is disabled.
+                  </p>
+                </div>
               )}
             </div>
           </div>

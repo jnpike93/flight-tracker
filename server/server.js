@@ -25,10 +25,10 @@ app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; " +
+    "script-src 'self' https://accounts.google.com https://apis.google.com; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; " +
     "font-src 'self' data: https://fonts.gstatic.com; " +
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://unpkg.com https://*.unpkg.com https://lh3.googleusercontent.com; " +
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://lh3.googleusercontent.com; " +
     "connect-src 'self' https://accounts.google.com https://www.googleapis.com; " +
     "frame-src 'self' https://accounts.google.com; " +
     "object-src 'none'; " +
@@ -53,33 +53,32 @@ const envAllowedOrigins = process.env.ALLOWED_ORIGINS
   : [];
 const allowedOrigins = [...new Set([...defaultAllowedOrigins, ...envAllowedOrigins])];
 
-const isAllowedOrigin = (origin, host) => {
-  if (!origin) return true;
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // Allow non-browser tools (e.g. curl, postman, direct server calls)
   const lower = origin.toLowerCase();
 
   // Whitelisted origins
   if (allowedOrigins.includes(lower)) return true;
 
   // Local development
-  if (lower.startsWith('http://localhost:') || lower.startsWith('http://127.0.0.1:')) return true;
+  if (process.env.NODE_ENV !== 'production') {
+    if (lower.startsWith('http://localhost:') || lower.startsWith('http://127.0.0.1:')) return true;
+  }
 
-  // Domain matches
+  // Explicit domain matches for cuteanimegirls.moe
   try {
     const originUrl = new URL(origin);
     const originHost = originUrl.hostname.toLowerCase();
-
-    // Match the request Host header (same host / reverse proxy)
-    if (host && originHost === host.split(':')[0].toLowerCase()) return true;
-
-    // cuteanimegirls.moe root and subdomains
-    if (originHost === 'cuteanimegirls.moe' || originHost.endsWith('.cuteanimegirls.moe')) return true;
+    if (originUrl.protocol === 'https:' || (process.env.NODE_ENV !== 'production' && originUrl.protocol === 'http:')) {
+      if (originHost === 'cuteanimegirls.moe' || originHost.endsWith('.cuteanimegirls.moe')) return true;
+    }
   } catch {}
 
   return false;
 };
 
 app.use(cors((req, callback) => {
-  const allowed = isAllowedOrigin(req.headers.origin, req.headers.host);
+  const allowed = isAllowedOrigin(req.headers.origin);
   callback(null, {
     origin: allowed,
     credentials: true
@@ -94,22 +93,22 @@ function logSecurityEvent(type, details = {}) {
   console.log(`[SECURITY_AUDIT] ${timestamp} [${type}] ${JSON.stringify(details)}`);
 }
 
-// 3. Sensitive Endpoint Rate Limiter with automatic expired entry pruning (OWASP A04)
-const rateLimitMap = new Map();
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, rec] of rateLimitMap.entries()) {
-    if (now > rec.resetAt) {
-      rateLimitMap.delete(ip);
-    }
-  }
-}, 5 * 60 * 1000).unref(); // Runs every 5 minutes without blocking process exit
-
+// 3. Sensitive Endpoint Rate Limiter with isolated state per limiter (OWASP A04)
 function createRateLimiter(windowMs = 60 * 1000, maxRequests = 20, message = 'Too many requests, please try again shortly.') {
+  const instanceMap = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, rec] of instanceMap.entries()) {
+      if (now > rec.resetAt) {
+        instanceMap.delete(ip);
+      }
+    }
+  }, 5 * 60 * 1000).unref(); // Runs every 5 minutes without blocking process exit
+
   return (req, res, next) => {
     const ip = req.ip || req.socket?.remoteAddress || 'unknown-ip';
     const now = Date.now();
-    const record = rateLimitMap.get(ip) || { count: 0, resetAt: now + windowMs };
+    const record = instanceMap.get(ip) || { count: 0, resetAt: now + windowMs };
 
     if (now > record.resetAt) {
       record.count = 0;
@@ -117,7 +116,7 @@ function createRateLimiter(windowMs = 60 * 1000, maxRequests = 20, message = 'To
     }
 
     record.count++;
-    rateLimitMap.set(ip, record);
+    instanceMap.set(ip, record);
 
     if (record.count > maxRequests) {
       logSecurityEvent('RATE_LIMIT_EXCEEDED', { ip, path: req.path, method: req.method });
@@ -246,7 +245,8 @@ app.get('/api/auth/config', (req, res) => {
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     hasGoogleAuth: !!process.env.GOOGLE_CLIENT_ID,
     totalAllowedUsers: allowedCount + envAllowed.length,
-    requireAuth: process.env.DISABLE_AUTH !== 'true'
+    requireAuth: process.env.DISABLE_AUTH !== 'true',
+    devLoginEnabled: process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_LOGIN === 'true'
   });
 });
 
@@ -316,18 +316,10 @@ app.post('/api/auth/google', authRateLimiter, async (req, res) => {
   }
 });
 
-// Development / Local Direct Sign-In (Restricted strictly to non-production and unconfigured OAuth environments)
+// Development / Local Direct Sign-In (Strictly disabled unless explicitly enabled in non-production environments)
 app.post('/api/auth/dev-login', authRateLimiter, (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(404).json({ error: 'NOT_FOUND', message: 'Development sign-in is disabled in production.' });
-  }
-
-  // If Google OAuth is configured, disallow direct login unless explicitly enabled for testing
-  if (process.env.GOOGLE_CLIENT_ID && process.env.ALLOW_DEV_LOGIN !== 'true') {
-    return res.status(403).json({
-      error: 'DEV_LOGIN_DISABLED',
-      message: 'Google Sign-In is configured. Direct development sign-in is disabled. Use Google OAuth to sign in.'
-    });
+  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEV_LOGIN !== 'true') {
+    return res.status(404).json({ error: 'NOT_FOUND', message: 'Development sign-in is disabled.' });
   }
 
   const { email, name } = req.body;
@@ -336,6 +328,15 @@ app.post('/api/auth/dev-login', authRateLimiter, (req, res) => {
   }
 
   const cleanEmail = email.trim().toLowerCase();
+
+  // Guard against unauthenticated admin impersonation via dev-login
+  if (auth.isAdmin(db, cleanEmail) && process.env.ALLOW_DEV_ADMIN !== 'true') {
+    logSecurityEvent('AUTH_DEV_ADMIN_REJECTED', { email: cleanEmail, ip: req.ip });
+    return res.status(403).json({
+      error: 'ADMIN_DEV_LOGIN_FORBIDDEN',
+      message: 'Direct development sign-in cannot be used to authenticate administrative accounts. Use Google OAuth.'
+    });
+  }
 
   // Record login request or update existing user
   const userStatus = auth.recordUserLoginRequest(db, {
@@ -1148,8 +1149,8 @@ app.get('/api/airlines/search', (req, res) => {
   res.json(results);
 });
 
-// 4. Flight number auto-lookup
-app.get('/api/flights/lookup/:flightNumber', lookupRateLimiter, (req, res) => {
+// 4. Flight number auto-lookup (tenant-isolated & authenticated)
+app.get('/api/flights/lookup/:flightNumber', requireAuth, lookupRateLimiter, (req, res) => {
   const raw = req.params.flightNumber.trim();
   // Regex to extract 2-letter airline code and digits (e.g., "UA 895", "BA178", "DL 482", "B6 123")
   const match = raw.match(/^([A-Za-z0-9]{2})\s*([0-9]+)?/);
@@ -1165,14 +1166,16 @@ app.get('/api/flights/lookup/:flightNumber', lookupRateLimiter, (req, res) => {
     if (airline) airlineName = airline.name;
   }
 
-  // Check if we have seen this flight number before in user history or samples
+  // Check if current user has previously logged this flight number (scoped strictly to user_email)
+  const userEmail = req.user.email.toLowerCase();
   const normalizedNumber = (airlineCode && number) ? `${airlineCode} ${number}` : raw.toUpperCase();
   const previousFlight = db.prepare(`
     SELECT origin_iata, dest_iata, aircraft, airline
     FROM flights
-    WHERE UPPER(flight_number) = ? OR UPPER(flight_number) = ?
+    WHERE (UPPER(flight_number) = ? OR UPPER(flight_number) = ?)
+      AND user_email = ?
     ORDER BY id DESC LIMIT 1
-  `).get(normalizedNumber, raw.toUpperCase());
+  `).get(normalizedNumber, raw.toUpperCase(), userEmail);
 
   res.json({
     flightNumber: normalizedNumber,
