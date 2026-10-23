@@ -131,6 +131,7 @@ const authRateLimiter = createRateLimiter(60 * 1000, 15, 'Too many authenticatio
 const calendarRateLimiter = createRateLimiter(60 * 1000, 15, 'Too many calendar scans requested. Please wait a minute and try again.');
 const apiWriteRateLimiter = createRateLimiter(60 * 1000, 60, 'Too many write requests. Please wait a minute and try again.');
 const lookupRateLimiter = createRateLimiter(60 * 1000, 30, 'Too many flight lookup requests. Please wait a minute and try again.');
+const boardingPassRateLimiter = createRateLimiter(60 * 1000, 30, 'Too many boarding pass parse requests. Please wait a minute and try again.');
 
 const dbPath = path.join(__dirname, 'flight_tracker.db');
 const db = new Database(dbPath);
@@ -411,20 +412,51 @@ app.get('/api/auth/allowed-users', requireAuth, requireAdmin, (req, res) => {
   res.json(Array.from(map.values()));
 });
 
+// Request Application Access
+app.post('/api/auth/request-access', authRateLimiter, (req, res) => {
+  const { email, name } = req.body || {};
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ error: 'A valid email address is required' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = typeof name === 'string' && name.trim() ? name.trim().slice(0, 100) : cleanEmail.split('@')[0];
+
+  try {
+    const userStatus = auth.recordUserLoginRequest(db, {
+      email: cleanEmail,
+      name: cleanName,
+      picture: '',
+      method: 'request_access'
+    });
+
+    logSecurityEvent('AUTH_REQUEST_ACCESS_SUBMITTED', { email: cleanEmail, status: userStatus, ip: req.ip });
+    res.json({
+      status: userStatus || 'pending',
+      message: 'Access request recorded successfully and awaiting administrator approval.',
+      user: { email: cleanEmail, name: cleanName }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to record access request.' });
+  }
+});
+
 // Add User to Allowed List (Admin only)
 app.post('/api/auth/allowed-users', requireAuth, requireAdmin, (req, res) => {
-  const { email, name } = req.body;
-  if (!email || !email.includes('@')) {
+  const { email, name } = req.body || {};
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
     return res.status(400).json({ error: 'Valid email address is required' });
   }
 
   const cleanEmail = email.trim().toLowerCase();
+  const cleanName = typeof name === 'string' && name.trim() ? name.trim().slice(0, 100) : cleanEmail.split('@')[0];
+
   try {
     db.prepare(`
-      INSERT INTO allowed_users (email, name, added_by)
-      VALUES (?, ?, ?)
-      ON CONFLICT(email) DO UPDATE SET name = excluded.name
-    `).run(cleanEmail, name || cleanEmail.split('@')[0], req.user.email);
+      INSERT INTO allowed_users (email, name, added_by, status)
+      VALUES (?, ?, ?, 'approved')
+      ON CONFLICT(email) DO UPDATE SET name = excluded.name, status = 'approved'
+    `).run(cleanEmail, cleanName, req.user.email);
 
     logSecurityEvent('ADMIN_ALLOWED_USER_ADDED', { admin: req.user.email, targetEmail: cleanEmail, ip: req.ip });
     res.status(201).json({ success: true, email: cleanEmail });
@@ -784,13 +816,13 @@ const flightIntelligence = require('./flightIntelligence');
 // Scan Google Calendar via OAuth Access Token
 app.post('/api/calendar/scan-google', requireAuth, calendarRateLimiter, async (req, res) => {
   try {
-    const { accessToken, timeMin, timeMax, query } = req.body;
-    if (!accessToken) {
+    const { accessToken, timeMin, timeMax, query } = req.body || {};
+    if (!accessToken || typeof accessToken !== 'string') {
       return res.status(400).json({ error: 'Google Calendar Access Token is required' });
     }
 
-    const defaultMin = timeMin || new Date(Date.now() - 10 * 365 * 24 * 60 * 60 * 1000).toISOString(); // Past 10 years
-    const defaultMax = timeMax || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // Future 1 year
+    const defaultMin = (typeof timeMin === 'string' && timeMin) || new Date(Date.now() - 10 * 365 * 24 * 60 * 60 * 1000).toISOString(); // Past 10 years
+    const defaultMax = (typeof timeMax === 'string' && timeMax) || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // Future 1 year
 
     // Comprehensive search queries likely to find flights and airline confirmations
     const defaultSearchTerms = [
@@ -823,7 +855,7 @@ app.post('/api/calendar/scan-google', requireAuth, calendarRateLimiter, async (r
     ];
 
     const termsToSearch = [];
-    if (query && query.trim()) {
+    if (typeof query === 'string' && query.trim()) {
       termsToSearch.push(query.trim());
     }
     for (const t of defaultSearchTerms) {
@@ -1042,10 +1074,10 @@ app.post('/api/calendar/confirm-import', requireAuth, apiWriteRateLimiter, (req,
         const destApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(dCode);
         if (!origApt || !destApt) continue;
 
-        const dist = Number(f.distance_miles) || 0;
+        const computedDist = calculateDistance(origApt.lat, origApt.lon, destApt.lat, destApt.lon);
         const airCode = String(f.airline_code || '').trim().toUpperCase();
-        if (!calendarParser.validateRoutePlausibility(airCode, origApt, destApt, dist)) {
-          console.warn('Blocked implausible flight during confirm-import:', airCode, oCode, '->', dCode, dist, 'miles');
+        if (!calendarParser.validateRoutePlausibility(airCode, origApt, destApt, computedDist.miles)) {
+          console.warn('Blocked implausible flight during confirm-import:', airCode, oCode, '->', dCode, computedDist.miles, 'miles');
           continue;
         }
 
@@ -1055,20 +1087,20 @@ app.post('/api/calendar/confirm-import', requireAuth, apiWriteRateLimiter, (req,
           airline: String(f.airline || 'Unknown').trim().slice(0, 100),
           airline_code: String(f.airline_code || '').trim().slice(0, 4).toUpperCase(),
           date: String(f.date || new Date().toISOString().slice(0, 10)).trim().slice(0, 20),
-          origin_iata: String(f.origin_iata).trim().slice(0, 4).toUpperCase(),
-          origin_name: String(f.origin_name || '').trim().slice(0, 120),
-          origin_city: String(f.origin_city || '').trim().slice(0, 80),
-          origin_country: String(f.origin_country || '').trim().slice(0, 80),
-          origin_lat: Number(f.origin_lat) || 0,
-          origin_lon: Number(f.origin_lon) || 0,
-          dest_iata: String(f.dest_iata).trim().slice(0, 4).toUpperCase(),
-          dest_name: String(f.dest_name || '').trim().slice(0, 120),
-          dest_city: String(f.dest_city || '').trim().slice(0, 80),
-          dest_country: String(f.dest_country || '').trim().slice(0, 80),
-          dest_lat: Number(f.dest_lat) || 0,
-          dest_lon: Number(f.dest_lon) || 0,
-          distance_miles: parseInt(f.distance_miles, 10) || 0,
-          distance_km: parseInt(f.distance_km, 10) || 0,
+          origin_iata: origApt.iata,
+          origin_name: origApt.name,
+          origin_city: origApt.city,
+          origin_country: origApt.country,
+          origin_lat: origApt.lat,
+          origin_lon: origApt.lon,
+          dest_iata: destApt.iata,
+          dest_name: destApt.name,
+          dest_city: destApt.city,
+          dest_country: destApt.country,
+          dest_lat: destApt.lat,
+          dest_lon: destApt.lon,
+          distance_miles: computedDist.miles,
+          distance_km: computedDist.km,
           aircraft: String(f.aircraft || '').trim().slice(0, 60),
           flight_class: ['Economy', 'Premium Economy', 'Business', 'First'].includes(f.flight_class) ? f.flight_class : 'Economy',
           seat: String(f.seat || '').trim().slice(0, 10),
@@ -1090,7 +1122,7 @@ app.post('/api/calendar/confirm-import', requireAuth, apiWriteRateLimiter, (req,
 
 // 1. Search airports by IATA, city, or name
 app.get('/api/airports/search', (req, res) => {
-  const q = (req.query.q || '').trim();
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   if (!q) {
     // Return major hub airports as suggestions when query is empty
     const hubs = db.prepare(`
@@ -1125,7 +1157,7 @@ app.get('/api/airports/search', (req, res) => {
 
 // 2. Get airport by IATA
 app.get('/api/airports/:iata', (req, res) => {
-  const iata = req.params.iata.toUpperCase();
+  const iata = typeof req.params.iata === 'string' ? req.params.iata.trim().toUpperCase() : '';
   const airport = db.prepare('SELECT * FROM airports WHERE iata = ?').get(iata);
   if (!airport) return res.status(404).json({ error: 'Airport not found' });
   res.json(airport);
@@ -1133,7 +1165,7 @@ app.get('/api/airports/:iata', (req, res) => {
 
 // 3. Search airlines
 app.get('/api/airlines/search', (req, res) => {
-  const q = (req.query.q || '').trim();
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   if (!q) return res.json([]);
 
   const queryUpper = q.toUpperCase();
@@ -1152,7 +1184,7 @@ app.get('/api/airlines/search', (req, res) => {
 
 // 4. Flight number auto-lookup (tenant-isolated & authenticated)
 app.get('/api/flights/lookup/:flightNumber', requireAuth, lookupRateLimiter, (req, res) => {
-  const raw = req.params.flightNumber.trim();
+  const raw = typeof req.params.flightNumber === 'string' ? req.params.flightNumber.trim() : '';
   // Regex to extract 2-letter airline code and digits (e.g., "UA 895", "BA178", "DL 482", "B6 123")
   const match = raw.match(/^([A-Za-z0-9]{2})\s*([0-9]+)?/);
 
@@ -1196,19 +1228,19 @@ app.get('/api/flights', requireAuth, (req, res) => {
   let query = 'SELECT * FROM flights WHERE user_email = ?';
   const params = [userEmail];
 
-  if (year && year !== 'all') {
+  if (typeof year === 'string' && year.trim() && year !== 'all') {
     query += ' AND substr(date, 1, 4) = ?';
-    params.push(year);
+    params.push(year.trim());
   }
 
-  if (airline && airline !== 'all') {
+  if (typeof airline === 'string' && airline.trim() && airline !== 'all') {
     query += ' AND airline = ?';
-    params.push(airline);
+    params.push(airline.trim());
   }
 
-  if (search) {
+  if (typeof search === 'string' && search.trim()) {
     query += ' AND (flight_number LIKE ? OR origin_iata LIKE ? OR dest_iata LIKE ? OR origin_city LIKE ? OR dest_city LIKE ? OR aircraft LIKE ? OR notes LIKE ?)';
-    const searchPattern = `%${search}%`;
+    const searchPattern = `%${search.trim()}%`;
     params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
   }
 
@@ -1676,7 +1708,7 @@ app.get('/api/stats', requireAuth, (req, res) => {
 });
 
 // Boarding Pass & Barcode Scanner Parser
-app.post('/api/flights/parse-boarding-pass', requireAuth, (req, res) => {
+app.post('/api/flights/parse-boarding-pass', requireAuth, boardingPassRateLimiter, (req, res) => {
   const { rawText } = req.body;
   if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
     return res.status(400).json({ error: 'Boarding pass text is required' });
@@ -1838,26 +1870,36 @@ app.post('/api/import', requireAuth, apiWriteRateLimiter, (req, res) => {
     for (const r of rows) {
       if (!r || typeof r !== 'object') continue;
       if (!r.flight_number || !r.origin_iata || !r.dest_iata) continue;
+      const oCode = String(r.origin_iata).trim().slice(0, 4).toUpperCase();
+      const dCode = String(r.dest_iata).trim().slice(0, 4).toUpperCase();
+      if (!oCode || !dCode || oCode === dCode) continue;
+
+      const origApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(oCode);
+      const destApt = db.prepare('SELECT * FROM airports WHERE iata = ?').get(dCode);
+      if (!origApt || !destApt) continue;
+
+      const dist = calculateDistance(origApt.lat, origApt.lon, destApt.lat, destApt.lon);
+
       insert.run({
         user_email: userEmail,
         flight_number: String(r.flight_number).trim().slice(0, 30),
         airline: String(r.airline || 'Unknown').trim().slice(0, 100),
-        airline_code: String(r.airline_code || '').trim().slice(0, 4),
+        airline_code: String(r.airline_code || '').trim().slice(0, 4).toUpperCase(),
         date: String(r.date || new Date().toISOString().split('T')[0]).trim().slice(0, 20),
-        origin_iata: String(r.origin_iata).trim().slice(0, 4).toUpperCase(),
-        origin_name: String(r.origin_name || '').trim().slice(0, 120),
-        origin_city: String(r.origin_city || '').trim().slice(0, 80),
-        origin_country: String(r.origin_country || '').trim().slice(0, 80),
-        origin_lat: Number(r.origin_lat) || 0,
-        origin_lon: Number(r.origin_lon) || 0,
-        dest_iata: String(r.dest_iata).trim().slice(0, 4).toUpperCase(),
-        dest_name: String(r.dest_name || '').trim().slice(0, 120),
-        dest_city: String(r.dest_city || '').trim().slice(0, 80),
-        dest_country: String(r.dest_country || '').trim().slice(0, 80),
-        dest_lat: Number(r.dest_lat) || 0,
-        dest_lon: Number(r.dest_lon) || 0,
-        distance_miles: parseInt(r.distance_miles, 10) || 0,
-        distance_km: parseInt(r.distance_km, 10) || 0,
+        origin_iata: origApt.iata,
+        origin_name: origApt.name,
+        origin_city: origApt.city,
+        origin_country: origApt.country,
+        origin_lat: origApt.lat,
+        origin_lon: origApt.lon,
+        dest_iata: destApt.iata,
+        dest_name: destApt.name,
+        dest_city: destApt.city,
+        dest_country: destApt.country,
+        dest_lat: destApt.lat,
+        dest_lon: destApt.lon,
+        distance_miles: dist.miles,
+        distance_km: dist.km,
         aircraft: String(r.aircraft || '').trim().slice(0, 60),
         flight_class: ['Economy', 'Premium Economy', 'Business', 'First'].includes(r.flight_class) ? r.flight_class : 'Economy',
         seat: String(r.seat || '').trim().slice(0, 10),

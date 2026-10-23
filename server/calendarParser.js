@@ -888,21 +888,21 @@ function extractFlightFromEvent(event, db, userEmail) {
       }
     }
 
-    if (!originIata && destIata) {
-      const prev = db.prepare('SELECT origin_iata FROM flights WHERE UPPER(flight_number) = ? AND dest_iata = ? LIMIT 1').get(cleanFn, destIata);
+    if (!originIata && destIata && userEmail) {
+      const prev = db.prepare('SELECT origin_iata FROM flights WHERE UPPER(flight_number) = ? AND dest_iata = ? AND user_email = ? LIMIT 1').get(cleanFn, destIata, userEmail.toLowerCase());
       if (prev) originIata = prev.origin_iata;
     }
   }
 
   // 8. If destination is known, check sequential itinerary continuity from previous logged flight
-  if (!originIata && destIata && date) {
+  if (!originIata && destIata && date && userEmail) {
     try {
       const lastFlight = db.prepare(`
         SELECT dest_iata FROM flights
-        WHERE date <= ? AND (user_email = ? OR user_email IS NULL)
+        WHERE date <= ? AND user_email = ?
         ORDER BY date DESC, id DESC
         LIMIT 1
-      `).get(date, userEmail ? userEmail.toLowerCase() : null);
+      `).get(date, userEmail.toLowerCase());
 
       if (lastFlight && lastFlight.dest_iata && lastFlight.dest_iata !== destIata) {
         originIata = lastFlight.dest_iata;

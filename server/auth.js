@@ -104,6 +104,23 @@ function getUserStatus(db, email) {
     .filter(Boolean);
   if (adminList.includes(cleanEmail)) return 'approved';
 
+  // Environment allowed list is always approved
+  const envAllowed = (process.env.ALLOWED_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (envAllowed.includes(cleanEmail)) return 'approved';
+
+  for (const pattern of envAllowed) {
+    if (pattern.startsWith('*@')) {
+      const allowedDomain = pattern.slice(2);
+      const emailDomain = cleanEmail.split('@')[1];
+      if (emailDomain && emailDomain === allowedDomain) {
+        return 'approved';
+      }
+    }
+  }
+
   try {
     const row = db.prepare('SELECT status FROM allowed_users WHERE LOWER(email) = ?').get(cleanEmail);
     if (row && row.status) {

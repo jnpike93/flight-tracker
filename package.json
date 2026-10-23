@@ -10,7 +10,7 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\"",
     "build": "npm run build --prefix client",
     "seed": "node server/seed_airports.js",
-    "test": "node server/test_safeguards.js && node server/test_calendar_tightening.js && node server/test_security_patches.js"
+    "test": "node server/test_safeguards.js && node server/test_calendar_tightening.js && node server/test_security_patches.js && node server/test_new_audit_remediations.js"
   },
   "keywords": [],
   "author": "",
