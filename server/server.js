@@ -28,8 +28,9 @@ app.use((req, res, next) => {
     "script-src 'self' https://accounts.google.com https://apis.google.com; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; " +
     "font-src 'self' data: https://fonts.gstatic.com; " +
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://server.arcgisonline.com https://lh3.googleusercontent.com; " +
-    "connect-src 'self' https://accounts.google.com https://www.googleapis.com; " +
+    "img-src 'self' data: blob: https://unpkg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://server.arcgisonline.com https://lh3.googleusercontent.com; " +
+    "connect-src 'self' https://unpkg.com https://accounts.google.com https://www.googleapis.com; " +
+    "worker-src 'self' blob:; " +
     "frame-src 'self' https://accounts.google.com; " +
     "object-src 'none'; " +
     "base-uri 'self';"
@@ -2004,6 +2005,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Flight Tracker backend server running on http://localhost:${PORT}`);
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => {
+  console.log(`Flight Tracker backend server running on http://${HOST}:${PORT}`);
 });
